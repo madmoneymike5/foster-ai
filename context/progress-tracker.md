@@ -38,6 +38,6 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Session Notes
 
-- Work is being performed in the linked `feature/design-system` worktree because the original checkout had an empty `.git` directory. The primary checkout was initialized with a local baseline commit before creating the worktree.
+- The original checkout had an empty `.git` directory, so a local baseline repository was initialized before implementation. The completed design-system commit was merged into `main`, and the temporary linked worktree was removed after verification.
 - Generated `components/ui/*` files were created by the shadcn CLI and left unmodified afterward.
 - CSS LSP warnings for Tailwind v4 directives were marked false positives. A generated `scroll-area.tsx` unused-import hint was deferred without changing the generated file.
