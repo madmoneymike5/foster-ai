@@ -73,7 +73,7 @@ export function ProjectSidebar({
         </Tabs>
 
         <div className="border-t border-surface-border p-4">
-          <Button className="w-full" onClick={onNewProject}>
+          <Button className="w-full" disabled={!onNewProject} onClick={onNewProject}>
             <Plus data-icon="inline-start" className="h-4 w-4" />
             New Project
           </Button>
