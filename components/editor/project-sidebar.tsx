@@ -36,7 +36,7 @@ export function ProjectSidebar({
       inert={!isOpen}
       aria-hidden={!isOpen}
       className={cn(
-        "absolute inset-y-0 left-0 z-40 w-80 transform border-r border-surface-border bg-surface/95 backdrop-blur transition-transform duration-200 ease-out",
+        "absolute inset-y-0 left-0 z-40 w-80 transform border-r border-surface-border bg-surface/95 backdrop-blur transition-transform duration-200 ease-out motion-reduce:transition-none",
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}
     >
