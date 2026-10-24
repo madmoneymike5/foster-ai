@@ -32,8 +32,8 @@ const features = [
 export function AuthPage({ children }: AuthPageProps) {
   return (
     <main className="flex flex-1">
-      <section className="hidden w-1/2 flex-col border-r border-surface-border bg-surface px-12 lg:flex xl:px-20">
-        <div className="pt-10">
+      <section className="relative hidden w-1/2 border-r border-surface-border bg-elevated lg:block">
+        <div className="absolute inset-x-0 top-0 px-12 pt-10 xl:px-20">
           <Image
             src="/branding/foster-ai-lockup.svg"
             alt="Foster AI"
@@ -43,15 +43,16 @@ export function AuthPage({ children }: AuthPageProps) {
             className="h-12 w-auto"
           />
         </div>
-        <div className="mt-24 max-w-md space-y-5">
-          <h1 className="text-4xl font-semibold leading-tight text-copy-primary">
-            More with less.
-          </h1>
-          <p className="text-lg leading-relaxed text-copy-secondary">
-            Full-stack systems architecture, engineered with intent.
-          </p>
-        </div>
-        <ul className="mt-16 space-y-8">
+        <div className="flex h-full flex-col justify-center px-12 py-24 xl:px-20">
+          <div className="max-w-md space-y-5">
+            <h1 className="text-4xl font-semibold leading-tight text-copy-primary">
+              More with less.
+            </h1>
+            <p className="text-lg leading-relaxed text-copy-secondary">
+              Full-stack systems architecture, engineered with intent.
+            </p>
+          </div>
+          <ul className="mt-12 space-y-8">
           {features.map((feature) => (
             <li key={feature.title} className="flex gap-4">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-dim text-brand">
@@ -67,9 +68,9 @@ export function AuthPage({ children }: AuthPageProps) {
               </div>
             </li>
           ))}
-        </ul>
-        <div className="flex-1" />
-        <p className="pb-8 text-sm text-copy-faint">
+          </ul>
+        </div>
+        <p className="absolute inset-x-0 bottom-0 px-12 pb-8 text-sm text-copy-faint xl:px-20">
           © 2026 Phoenix Rising Labs. All rights reserved.
         </p>
       </section>
