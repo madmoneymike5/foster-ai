@@ -41,6 +41,12 @@
 - Do not store large generated content directly in the database.
 - Task run records are first-class relational data — treat ownership and run IDs as verified before any token issuance.
 
+## Documentation
+
+- JSDoc on exported functions and components: responsibility, non-obvious behavior, and meaningful parameters (`@param`).
+- Comment non-obvious invariants, security decisions, and the "why" — especially where the code looks over-eager or under-eager.
+- No line-by-line narration, and no filler added to satisfy coverage metrics.
+
 ## File Organization
 
 - `lib/` — shared infrastructure: Prisma client, auth helpers, utilities.

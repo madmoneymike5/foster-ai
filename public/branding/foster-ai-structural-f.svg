@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="105" height="122" viewBox="0 0 105 122" fill="none" role="img" aria-labelledby="logo-title logo-desc">
+  <title id="logo-title">Foster AI structural F symbol</title>
+  <desc id="logo-desc">Three circular joints connect the vertical stem and two arms of an architectural letter F, with two fine diagonal braces.</desc>
+  <g id="structural-f" transform="translate(0 0) scale(1)">
+    <g fill="none" stroke="#92969A" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 14 L76 60 M18 106 L76 60"/>
+    </g>
+    <g fill="none" stroke="#E8E7E9" stroke-linecap="butt" stroke-linejoin="round">
+      <path d="M18 14 H97" stroke-width="9"/>
+      <path d="M18 14 V106" stroke-width="9"/>
+      <path d="M18 60 H76" stroke-width="8"/>
+    </g>
+    <g fill="#E8E7E9">
+      <circle cx="18" cy="14" r="10.5"/>
+      <circle cx="18" cy="106" r="10.5"/>
+      <circle cx="76" cy="60" r="10.5"/>
+    </g>
+  </g>
+</svg>

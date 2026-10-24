@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="676" height="122" viewBox="0 0 676 122" fill="none" role="img" aria-labelledby="logo-title logo-desc">
+  <title id="logo-title">Foster AI combined logo</title>
+  <desc id="logo-desc">Structural F mark followed by foster.ai in ivory and muted lime.</desc>
+  <g id="structural-f" transform="translate(0 0) scale(1.035)">
+    <g fill="none" stroke="#92969A" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 14 L76 60 M18 106 L76 60"/>
+    </g>
+    <g fill="none" stroke="#E8E7E9" stroke-linecap="butt" stroke-linejoin="round">
+      <path d="M18 14 H97" stroke-width="9"/>
+      <path d="M18 14 V106" stroke-width="9"/>
+      <path d="M18 60 H76" stroke-width="8"/>
+    </g>
+    <g fill="#E8E7E9">
+      <circle cx="18" cy="14" r="10.5"/>
+      <circle cx="18" cy="106" r="10.5"/>
+      <circle cx="76" cy="60" r="10.5"/>
+    </g>
+  </g>
+  <g id="foster-wordmark" transform="translate(136 110) scale(0.14 -0.14)" aria-label="foster.ai">
+    <path data-letter="f" fill="#E8E7E9" transform="translate(0.000 0)" d="M58 0H191V433H266V544H191C192 595 209 611 262 611H274V737C258 739 251 739 241 739C183 739 136 718 102 677C75 645 65 613 58 544H10V433H58Z"/>
+    <path data-letter="o" fill="#E8E7E9" transform="translate(280.000 0)" d="M323 567C162 567 30 436 30 277C30 117 162 -13 324 -13C485 -13 619 117 619 273C619 438 490 567 323 567ZM324 445C413 445 485 370 485 277C485 184 413 109 325 109C235 109 164 184 164 279C164 370 236 445 324 445Z"/>
+    <path data-letter="s" fill="#E8E7E9" transform="translate(909.000 0)" d="M19 176C25 122 34 93 56 64C92 16 155 -13 222 -13C333 -13 420 70 420 176C420 260 378 304 266 338C211 355 211 355 198 361C182 369 172 382 172 399C172 425 194 445 223 445C251 445 269 430 275 401H405C403 448 392 476 365 506C330 545 278 567 223 567C119 567 39 493 39 398C39 317 82 271 193 234C243 217 248 215 262 206C278 196 287 181 287 163C287 132 262 109 227 109C188 109 166 129 153 176Z"/>
+    <path data-letter="t" fill="#E8E7E9" transform="translate(1349.000 0)" d="M74 0H207V433H287V554H207V739H74V554H9V433H74Z"/>
+    <path data-letter="e" fill="#E8E7E9" transform="translate(1654.000 0)" d="M603 218C607 238 608 250 608 270C608 441 487 567 322 567C159 567 30 438 30 275C30 113 161 -13 330 -13C421 -13 492 20 550 87C571 113 585 136 594 164H449C415 124 382 109 327 109C248 109 190 151 174 218ZM170 335C191 407 245 445 324 445C406 445 460 406 477 335Z"/>
+    <path data-letter="r" fill="#E8E7E9" transform="translate(2283.000 0)" d="M54 0H187V308C184 390 226 436 306 439V567H296C239 567 211 551 176 500V554H54Z"/>
+    <path data-letter="." fill="#AAC65E" transform="translate(2603.000 0)" d="M138.5 133A66.5 66.5 0 1 0 138.5 0A66.5 66.5 0 1 0 138.5 133Z"/>
+    <path data-letter="a" fill="#AAC65E" transform="translate(2852.000 0)" d="M615 554H493V480C447 541 392 567 312 567C148 567 30 444 30 275C30 108 147 -13 309 -13C387 -13 440 11 493 72V0H615ZM326 445C421 445 489 374 489 273C489 233 473 187 449 159C422 126 379 109 328 109C231 109 164 175 164 272C164 373 231 445 326 445Z"/>
+    <path data-letter="i" fill="#AAC65E" transform="translate(3512.000 0)" d="M54 0H187V554H54Z M120.5 739A62.5 62.5 0 1 0 120.5 614A62.5 62.5 0 1 0 120.5 739Z"/>
+  </g>
+</svg>

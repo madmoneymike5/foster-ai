@@ -6,10 +6,13 @@ Update this file whenever the current phase, active feature, or implementation s
 
 - Phase 1: Design system foundation complete
 - Phase 2: Editor chrome complete
+- Phase 2.5: Clerk foundation installed (application linked, provider, proxy, auth pages, header chrome)
+- Phase 3: Clerk authentication feature integration (spec 03) complete
+- Phase 3.5: PR #2 open on `main` — spec 03 + auth-page redesign + vector branding + bg-token fix; auth routing made code-owned per CodeRabbit finding (auth-routes-fix); JSDoc added to all eight PR-touched exported functions and a documentation convention codified in `code-standards.md` (docstrings-fix)
 
 ## Current Goal
 
-- Move to the next feature spec (03).
+- Merge PR #2, then move to the next feature spec (04 — project dialogs).
 
 ## Completed
 
@@ -20,6 +23,29 @@ Update this file whenever the current phase, active feature, or implementation s
 - Added the shared `cn()` helper in `lib/utils.ts`.
 - Replaced the generated light theme with the dark-only project tokens and enabled the `dark` root class.
 - Verified lint, TypeScript, production build, `cn()` Tailwind conflict merging, and diff cleanliness.
+- Clerk foundation installed (committed to `main`, worktree `clerk-setup` removed after verification; feature integration now in progress on `feature/auth`):
+  - Linked the project to the existing Clerk application **Foster AI** (`app_3L7GPY3tqiqITsUp3BEUDpg6qoY`) via the Clerk CLI; no new or accountless application was created.
+  - `@clerk/nextjs@^7.9.20` (current SDK generation): `ClerkProvider` wraps body content in `app/layout.tsx`; `proxy.ts` runs `clerkMiddleware()`; sign-in/sign-up catch-all pages at `/sign-in` and `/sign-up`.
+  - Layout header (h-12, `bg-surface`, `border-surface-border`) shows the wordmark plus `SignInButton`/`SignUpButton` when signed out and `UserButton` when signed in. (Superseded by spec 03: the global header was removed — the app chrome is the editor navbar, which now carries the `UserButton`.)
+  - shadcn/ui theming: `@clerk/ui` installed, `appearance={{ theme: shadcn }}` on `ClerkProvider`, `@import "@clerk/ui/themes/shadcn.css"` in `globals.css`. (Superseded by spec 03: `theme: dark` from `@clerk/ui/themes` with all appearance variables overridden by app CSS variables; the shadcn CSS import was removed.)
+  - Development keys for the app live in `.env.local` (gitignored) in the primary checkout; `next.config.ts` does not enable `cacheComponents`, so no Suspense wrappers are required for request-reading Clerk components. Next 16 uses `proxy.ts`, not `middleware.ts`.
+  - Verified: lint, `tsc --noEmit` (after `next build` generated route types), production build (routes `/`, `/sign-in`, `/sign-up` + Proxy), `clerk doctor` green, and live dev-server render of the header controls and prebuilt sign-in page (GitHub/Google/email-password).
+  - Clerk init's post-setup note: routes are public by default — protect pages, Route Handlers, and Server Actions individually with `await auth.protect()` as features land. (Superseded for navigation by spec 03: `proxy.ts` now protects every route by default, with only the env-defined auth paths public; per-request `auth()`/ownership checks at data boundaries remain required.)
+- Implemented feature spec 03 (auth) on branch `feature/auth`, merged to `main` (fast-forward):
+  - `proxy.ts` — protected-first: `clerkMiddleware` + `createRouteMatcher`; public routes built from the code-owned constants in `lib/auth-routes.ts` (catch-all `(.*)` so nested Clerk routes stay public); explicit `signInUrl`/`signUpUrl` options passed to `clerkMiddleware` so `auth.protect()`'s redirect target is code-owned too — env vars no longer drive authorization (corrected in PR #2 after a CodeRabbit finding; see spec 03 correction note).
+  - `app/layout.tsx` — `ClerkProvider` now wraps the whole root layout with `theme: dark` from `@clerk/ui/themes`; all appearance variables overridden with app CSS variables (`var(--accent-primary)`, `var(--bg-surface)`, `var(--border-default)`, `var(--state-*)`, `var(--font-geist-sans)`, `var(--radius)`); no hardcoded colors. The interim global header (wordmark + sign-in/out buttons) was removed — the app chrome is the editor navbar.
+  - `components/auth/auth-page.tsx` — shared two-panel auth layout: left panel (compact logo, "More with less." tagline, 4-item text-only feature list) on large screens only (`hidden lg:flex`), centered Clerk form on the right; form-only below `lg`. No gradients, no hero, no cards.
+  - `app/sign-in/[[...sign-in]]/page.tsx`, `app/sign-up/[[...sign-up]]/page.tsx` — `SignIn`/`SignUp` wrapped in `AuthPage`.
+  - `app/page.tsx` — server redirect: authenticated → `/editor`, unauthenticated → `AUTH_SIGN_IN_ROUTE` from `lib/auth-routes.ts` (middleware enforces the same redirect for signed-out visitors).
+  - `components/editor/editor-navbar.tsx` — Clerk `UserButton` added to the right section; default Clerk user menu/profile flows untouched.
+  - `app/editor/page.tsx` + `components/editor/editor-workspace.tsx` — minimal protected `/editor` route (navbar with sidebar state + `ProjectSidebar` + empty canvas area) so the authenticated redirect target exists; canvas behavior remains a later spec.
+  - `app/globals.css` — removed the now-unneeded `@import "@clerk/ui/themes/shadcn.css"` (the `dark` theme carries its own values; no CSS theme import is shipped for it).
+  - Root metadata updated to "Foster AI" (was the generated "Create Next App" placeholder).
+- Post-completion auth page redesign (per Sarah, reference: Ghost AI sign-in screenshot) on branch `feature/branding`, merged to `main`:
+  - `components/auth/auth-page.tsx` — larger type throughout ("More with less." at `text-4xl`, copy at `text-lg`, feature titles `text-base`); left panel uses `bg-surface` (slightly lighter than the right panel's `bg-base`, not gray); copyright "© 2026 Phoenix Rising Labs. All rights reserved."; Clerk appearance `fontSize` set to `0.875rem`.
+  - Branding assets are now vector SVGs provided by Sarah in `public/branding/`: `foster-ai-lockup.svg` (structural F + "foster.ai" wordmark, used on the auth left panel via `next/image` with `unoptimized`), plus `foster-ai-structural-f.svg` and `foster-ai-wordmark.svg` as individual assets. The earlier raster PNG extracts from the `Foster AI Branding.png` collage were deleted (the vector lockup replaced them and removed the raster seam artifact).
+  - Left panel background is `bg-elevated` (#18181C) — measured against the reference screenshot's left panel (rgb 24,23,27); the logo sits absolutely at the top, the copyright absolutely at the bottom, and the heading/description/feature-list group is vertically centered (`flex h-full flex-col justify-center`) so its middle aligns exactly with the sign-in card's middle.
+  - Design-system fix found while verifying: the theme vars were named `--color-bg-base/surface/elevated/subtle`, which makes Tailwind v4 generate `bg-bg-base` etc. — so every documented `bg-base`/`bg-surface`/`bg-elevated`/`bg-subtle` utility in the app was a silent no-op (the auth left panel's earlier `bg-surface` never rendered). Renamed to `--color-base/surface/elevated/subtle` in `app/globals.css`; the documented utilities now generate (verified in the production build CSS), and all existing `bg-*` token usage across the app now renders its intended color.
 - Implemented feature spec 02 (editor chrome) on branch `feature/editor-chrome`:
   - `components/editor/editor-navbar.tsx` — client component, fixed-height (`h-12`) top navbar with left/center/right sections, sidebar toggle using `PanelLeftOpen`/`PanelLeftClose` driven by `isSidebarOpen`, `aria-label`/`aria-expanded` on the icon-only toggle, empty center and right sections, `bg-surface` background with `border-surface-border` bottom border.
   - `components/editor/project-sidebar.tsx` — client component, absolutely positioned floating overlay (`absolute inset-y-0 left-0`) so opening it never pushes page content, transform-based left slide-in (`translate-x` + `transition-transform`), `inert` and `aria-hidden` while closed, `Projects` header with close button, shadcn `Tabs` for "My Projects" and "Shared" with empty placeholder states, full-width `New Project` button with `Plus` icon at the bottom (optional `onNewProject` callback, unwired until a later spec).
@@ -31,27 +57,40 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Next Up
 
-- Implement feature spec 03.
+- Implement feature spec 04 (project dialogs).
 
 ## Open Questions
 
 - None for this feature unit.
 
-## Verification Evidence
+## Verification Evidence (spec 03)
 
-- `npm run lint` (ESLint): no errors in the worktree.
-- `npx tsc --noEmit`: clean. A fresh worktree needs one `npm run build` first, because Next generates `.next/types/` (route types, including the global `LayoutProps`) and `next-env.d.ts` during the build.
-- `npm run build` (Next.js 16.3.4, Turbopack): production build succeeded, including Next's own TypeScript pass and static page generation.
+- `npm run lint`, `npx tsc --noEmit`, and `npm run build` (Next 16.3.4, Turbopack) all clean in the worktree; build output routes: `ƒ /`, `○ /editor`, `ƒ /sign-in/[[...sign-in]]`, `ƒ /sign-up/[[...sign-up]]` + Proxy.
+- Live checks against the 3001 dev service (post-merge), signed out: `/` → 307 to `/sign-in?redirect_url=…/`, `/editor` → 307 to `/sign-in`, `/sign-in` and `/sign-up` → 200.
+- Signed in (temporary API-created session for the existing dev user, revoked after the test; dev-instance handshake cookies `__session` + `__client_uat` + `__clerk_db_jwt`): `/` → 307 to `/editor`, `/editor` → 200.
+- `UserButton` code present in the `/editor` page's served JS chunks (Clerk prebuilt components render client-side in this SDK generation, so SSR HTML shows only the app chrome).
+- Headless-browser render of `/sign-in` and `/sign-up` on 3001: both show the left branding/feature panel and Clerk's full form (GitHub/Google/email-password, sign-in ↔ sign-up links, "Foster AI" tab title).
+- Auth pages and appearance config contain no hardcoded colors — only `var(--…)` references and project Tailwind tokens.
 - No `components/ui/*` files were modified.
 
 ## Architecture Decisions
 
 - This feature adds reusable UI primitives and styling infrastructure only; it does not change application data boundaries or storage.
-- The project sidebar uses `absolute` positioning so it floats over the editor canvas inside the workspace's relative container (the editor layout in a later spec provides that container). `z-40` keeps it above the canvas and below dialog overlays (`z-50`).
+- The project sidebar uses `absolute` positioning so it floats over the editor canvas inside the workspace's relative container. `z-40` keeps it above the canvas and below dialog overlays (`z-50`).
+- Route protection is protected-first in `proxy.ts` (public routes are the code-owned auth paths from `lib/auth-routes.ts` only); pages and future Route Handlers/Server Actions still need their own `await auth()`/ownership checks per `architecture-context.md` invariants — the proxy protects navigation, not data access.
+- `/editor` currently renders only the navbar + projects sidebar around an empty canvas area; it exists so the spec 03 authenticated redirect has a valid target. Spec 04 (project dialogs) wires the sidebar's `New Project` button; the canvas itself lands later.
 
 ## Session Notes
 
+- Clerk setup was done in the linked worktree `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/clerk-setup` on branch `feature/clerk-setup`, merged to `main`, and the worktree removed with `git wt remove --confirmed-integrated` (branch is ahead of `origin/main`, which has no remote in the local baseline repo).
+- The `NEXT_PUBLIC_CLERK_*` route URL env vars and development keys were written to `.env.local` in the worktree, then copied to the primary checkout; the file is gitignored in both.
+- Dev server hostname constraint (documented in `~/.config/systemd/user/foster-ai.service`): the persistent `foster-ai.service` must run `next dev -H localhost -p 3001`, **not** `-H 127.0.0.1`. Clerk's dev handshake rewrites the request to `http://localhost:3001`; with a `127.0.0.1` bind, Next sees a different origin and self-proxies that rewrite into itself, 500ing every route (`Failed to proxy https://localhost:3001/` + EPROTO in the journal). Both `http://localhost:3001` and the tailnet Caddy TLS proxy (`https://sarah-taylor.tail1644ec.ts.net:3001` → `127.0.0.1:3001`) render correctly under the `localhost` bind. Never `rm -rf .next` under the running service.
+- Tailnet dev-origin fix: `next.config.ts` now includes `sarah-taylor.tail1644ec.ts.net` in `allowedDevOrigins`. Without it, Next rejected the proxied `/\_next/hmr` WebSocket with upstream `Unauthorized` (Caddy returned 502), which stalled Clerk's automatic client initialization on the tailnet even though Clerk's handshake and direct API calls succeeded. After the config change and service restart, the tailnet reaches `Clerk.loaded === true`, `/sign-in` and `/sign-up` render their full forms, and header buttons navigate correctly.
+- Before production: claim/verify the app from the Clerk Dashboard and configure the production instance (`npx -y clerk@latest deploy`); temporary/development keys are not production-ready.
 - Feature spec 02 was implemented in the linked worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/editor-chrome` on branch `feature/editor-chrome`.
+- Feature spec 03 was implemented in the linked worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/auth` on branch `feature/auth`, fast-forward merged to `main`, and the worktree removed after verification.
+- Signed-in live testing on the dev instance requires the 2026 Clerk cookie protocol: a dev-browser handshake token (`__clerk_db_jwt`, from `GET https://<dev-instance>.clerk.accounts.dev/v1/client/handshake?domain=…&redirect_url=…`), the session JWT in `__session`, and its `iat` in `__client_uat`. Session tokens from `POST /v1/sessions/{id}/tokens` expire after ~60s — mint and use in the same command. A plain `Authorization: Bearer` header or `ck` header is not accepted by the middleware in this generation.
+- The removed global layout header was the interim chrome from the initial Clerk setup; per spec 03 the user menu lives in the editor navbar.
 - The original checkout had an empty `.git` directory, so a local baseline repository was initialized before implementation. The completed design-system commit was merged into `main`, and the temporary linked worktree was removed after verification.
 - Generated `components/ui/*` files were created by the shadcn CLI and left unmodified afterward.
 - CSS LSP warnings for Tailwind v4 directives were marked false positives. A generated `scroll-area.tsx` unused-import hint was deferred without changing the generated file.

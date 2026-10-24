@@ -1,5 +1,6 @@
 "use client";
 
+import { UserButton } from "@clerk/nextjs";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,13 @@ interface EditorNavbarProps {
   onToggleSidebar: () => void;
 }
 
+/**
+ * Top chrome of the editor: projects sidebar toggle on the left, the
+ * signed-in user menu (Clerk `UserButton`) on the right.
+ * @param isSidebarOpen - Whether the projects sidebar is open; drives the
+ *   toggle icon, label, and `aria-expanded`.
+ * @param onToggleSidebar - Called when the user clicks the toggle button.
+ */
 export function EditorNavbar({
   isSidebarOpen,
   onToggleSidebar,
@@ -33,7 +41,9 @@ export function EditorNavbar({
         </Button>
       </div>
       <div className="flex flex-1 items-center justify-center" />
-      <div className="flex items-center" />
+      <div className="flex items-center">
+        <UserButton />
+      </div>
     </header>
   );
 }
