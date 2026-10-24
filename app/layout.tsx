@@ -39,6 +39,7 @@ const clerkAppearance = {
     colorSuccess: "var(--state-success)",
     colorWarning: "var(--state-warning)",
     fontFamily: "var(--font-geist-sans)",
+    fontSize: "0.875rem",
     borderRadius: "var(--radius)",
   },
 };
