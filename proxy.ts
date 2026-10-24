@@ -1,18 +1,26 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { AUTH_SIGN_IN_ROUTE, AUTH_SIGN_UP_ROUTE } from "@/lib/auth-routes";
 
-// Public routes are defined by the existing Clerk route env vars.
-// Everything else is protected by default (protected-first strategy).
-const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL ?? "/sign-in";
-const signUpUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL ?? "/sign-up";
-
+// Public routes are code-owned (see lib/auth-routes.ts). Environment
+// overrides of the Clerk sign-in / sign-up URLs must not drive
+// authorization: a drifted value would open a nonexistent path while
+// leaving the real form protected.
 const isPublicRoute = createRouteMatcher([
-  `${signInUrl}(.*)`,
-  `${signUpUrl}(.*)`,
+  `${AUTH_SIGN_IN_ROUTE}(.*)`,
+  `${AUTH_SIGN_UP_ROUTE}(.*)`,
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) await auth.protect();
-});
+export default clerkMiddleware(
+  async (auth, req) => {
+    if (!isPublicRoute(req)) await auth.protect();
+  },
+  {
+    // Explicit redirect target for auth.protect() so the SDK never
+    // falls back to environment configuration for an authz-sensitive URL.
+    signInUrl: AUTH_SIGN_IN_ROUTE,
+    signUpUrl: AUTH_SIGN_UP_ROUTE,
+  },
+);
 
 export const config = {
   matcher: [

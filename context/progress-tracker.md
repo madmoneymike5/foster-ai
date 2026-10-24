@@ -8,10 +8,11 @@ Update this file whenever the current phase, active feature, or implementation s
 - Phase 2: Editor chrome complete
 - Phase 2.5: Clerk foundation installed (application linked, provider, proxy, auth pages, header chrome)
 - Phase 3: Clerk authentication feature integration (spec 03) complete
+- Phase 3.5: PR #2 open on `main` — spec 03 + auth-page redesign + vector branding + bg-token fix; auth routing made code-owned per CodeRabbit finding (auth-routes-fix)
 
 ## Current Goal
 
-- Move to the next feature spec (04 — project dialogs).
+- Merge PR #2, then move to the next feature spec (04 — project dialogs).
 
 ## Completed
 
@@ -31,11 +32,11 @@ Update this file whenever the current phase, active feature, or implementation s
   - Verified: lint, `tsc --noEmit` (after `next build` generated route types), production build (routes `/`, `/sign-in`, `/sign-up` + Proxy), `clerk doctor` green, and live dev-server render of the header controls and prebuilt sign-in page (GitHub/Google/email-password).
   - Clerk init's post-setup note: routes are public by default — protect pages, Route Handlers, and Server Actions individually with `await auth.protect()` as features land. (Superseded for navigation by spec 03: `proxy.ts` now protects every route by default, with only the env-defined auth paths public; per-request `auth()`/ownership checks at data boundaries remain required.)
 - Implemented feature spec 03 (auth) on branch `feature/auth`, merged to `main` (fast-forward):
-  - `proxy.ts` — protected-first: `clerkMiddleware` + `createRouteMatcher`; public routes built from `NEXT_PUBLIC_CLERK_SIGN_IN_URL` / `NEXT_PUBLIC_CLERK_SIGN_UP_URL` (catch-all `(.*)` so nested Clerk routes stay public); everything else goes through `await auth.protect()`.
+  - `proxy.ts` — protected-first: `clerkMiddleware` + `createRouteMatcher`; public routes built from the code-owned constants in `lib/auth-routes.ts` (catch-all `(.*)` so nested Clerk routes stay public); explicit `signInUrl`/`signUpUrl` options passed to `clerkMiddleware` so `auth.protect()`'s redirect target is code-owned too — env vars no longer drive authorization (corrected in PR #2 after a CodeRabbit finding; see spec 03 correction note).
   - `app/layout.tsx` — `ClerkProvider` now wraps the whole root layout with `theme: dark` from `@clerk/ui/themes`; all appearance variables overridden with app CSS variables (`var(--accent-primary)`, `var(--bg-surface)`, `var(--border-default)`, `var(--state-*)`, `var(--font-geist-sans)`, `var(--radius)`); no hardcoded colors. The interim global header (wordmark + sign-in/out buttons) was removed — the app chrome is the editor navbar.
   - `components/auth/auth-page.tsx` — shared two-panel auth layout: left panel (compact logo, "More with less." tagline, 4-item text-only feature list) on large screens only (`hidden lg:flex`), centered Clerk form on the right; form-only below `lg`. No gradients, no hero, no cards.
   - `app/sign-in/[[...sign-in]]/page.tsx`, `app/sign-up/[[...sign-up]]/page.tsx` — `SignIn`/`SignUp` wrapped in `AuthPage`.
-  - `app/page.tsx` — server redirect: authenticated → `/editor`, unauthenticated → the sign-in env route (middleware enforces the same redirect for signed-out visitors).
+  - `app/page.tsx` — server redirect: authenticated → `/editor`, unauthenticated → `AUTH_SIGN_IN_ROUTE` from `lib/auth-routes.ts` (middleware enforces the same redirect for signed-out visitors).
   - `components/editor/editor-navbar.tsx` — Clerk `UserButton` added to the right section; default Clerk user menu/profile flows untouched.
   - `app/editor/page.tsx` + `components/editor/editor-workspace.tsx` — minimal protected `/editor` route (navbar with sidebar state + `ProjectSidebar` + empty canvas area) so the authenticated redirect target exists; canvas behavior remains a later spec.
   - `app/globals.css` — removed the now-unneeded `@import "@clerk/ui/themes/shadcn.css"` (the `dark` theme carries its own values; no CSS theme import is shipped for it).
@@ -76,7 +77,7 @@ Update this file whenever the current phase, active feature, or implementation s
 
 - This feature adds reusable UI primitives and styling infrastructure only; it does not change application data boundaries or storage.
 - The project sidebar uses `absolute` positioning so it floats over the editor canvas inside the workspace's relative container. `z-40` keeps it above the canvas and below dialog overlays (`z-50`).
-- Route protection is protected-first in `proxy.ts` (public routes are the env-defined auth paths only); pages and future Route Handlers/Server Actions still need their own `await auth()`/ownership checks per `architecture-context.md` invariants — the proxy protects navigation, not data access.
+- Route protection is protected-first in `proxy.ts` (public routes are the code-owned auth paths from `lib/auth-routes.ts` only); pages and future Route Handlers/Server Actions still need their own `await auth()`/ownership checks per `architecture-context.md` invariants — the proxy protects navigation, not data access.
 - `/editor` currently renders only the navbar + projects sidebar around an empty canvas area; it exists so the spec 03 authenticated redirect has a valid target. Spec 04 (project dialogs) wires the sidebar's `New Project` button; the canvas itself lands later.
 
 ## Session Notes
