@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Foster AI",
-  description: "Full-stack systems architecture, engineered with intent.",
+  description: "Full-stack systems architecture, engineered with intent: Describe your architecture in plain English. Foster AI visually maps it to a shared canvas your whole team can refine in real time.",
 };
 
 // Clerk appearance built on the dark theme, overridden with the app's

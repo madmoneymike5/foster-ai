@@ -46,10 +46,10 @@ export function AuthPage({ children }: AuthPageProps) {
         <div className="flex h-full flex-col justify-center px-12 py-24 xl:px-20">
           <div className="max-w-md space-y-5">
             <h1 className="text-4xl font-semibold leading-tight text-copy-primary">
-              More with less.
+              Design more with less.
             </h1>
             <p className="text-lg leading-relaxed text-copy-secondary">
-              Full-stack systems architecture, engineered with intent.
+              Full-stack systems architecture, engineered with intent: Describe your architecture in plain English. Foster AI visually maps it to a shared canvas your whole team can refine in real time.
             </p>
           </div>
           <ul className="mt-12 space-y-8">
