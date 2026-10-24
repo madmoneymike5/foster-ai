@@ -35,10 +35,11 @@ export function AuthPage({ children }: AuthPageProps) {
       <section className="hidden w-1/2 flex-col border-r border-surface-border bg-surface px-12 lg:flex xl:px-20">
         <div className="pt-10">
           <Image
-            src="/branding/foster-ai-wordmark.png"
+            src="/branding/foster-ai-lockup.svg"
             alt="Foster AI"
-            width={1054}
-            height={269}
+            width={676}
+            height={122}
+            unoptimized
             className="h-12 w-auto"
           />
         </div>
