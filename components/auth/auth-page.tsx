@@ -38,8 +38,8 @@ export function AuthPage({ children }: AuthPageProps) {
             src="/branding/foster-ai-wordmark.png"
             alt="Foster AI"
             width={1054}
-            height={480}
-            className="h-9 w-auto"
+            height={269}
+            className="h-12 w-auto"
           />
         </div>
         <div className="mt-24 max-w-md space-y-5">
