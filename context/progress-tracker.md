@@ -9,10 +9,11 @@ Update this file whenever the current phase, active feature, or implementation s
 - Phase 2.5: Clerk foundation installed (application linked, provider, proxy, auth pages, header chrome)
 - Phase 3: Clerk authentication feature integration (spec 03) complete
 - Phase 3.5: PR #2 open on `main` — spec 03 + auth-page redesign + vector branding + bg-token fix; auth routing made code-owned per CodeRabbit finding (auth-routes-fix); JSDoc added to all eight PR-touched exported functions and a documentation convention codified in `code-standards.md` (docstrings-fix)
+- Phase 4: spec 04 — project dialogs & editor home — implemented and verified (branch `feature/project-dialogs`, merging to `main`)
 
 ## Current Goal
 
-- Merge PR #2, then move to the next feature spec (04 — project dialogs).
+- Merge spec 04 into `main`, then move to the next feature spec.
 
 ## Completed
 
@@ -46,6 +47,14 @@ Update this file whenever the current phase, active feature, or implementation s
   - Branding assets are now vector SVGs provided by Sarah in `public/branding/`: `foster-ai-lockup.svg` (structural F + "foster.ai" wordmark, used on the auth left panel via `next/image` with `unoptimized`), plus `foster-ai-structural-f.svg` and `foster-ai-wordmark.svg` as individual assets. The earlier raster PNG extracts from the `Foster AI Branding.png` collage were deleted (the vector lockup replaced them and removed the raster seam artifact).
   - Left panel background is `bg-elevated` (#18181C) — measured against the reference screenshot's left panel (rgb 24,23,27); the logo sits absolutely at the top, the copyright absolutely at the bottom, and the heading/description/feature-list group is vertically centered (`flex h-full flex-col justify-center`) so its middle aligns exactly with the sign-in card's middle.
   - Design-system fix found while verifying: the theme vars were named `--color-bg-base/surface/elevated/subtle`, which makes Tailwind v4 generate `bg-bg-base` etc. — so every documented `bg-base`/`bg-surface`/`bg-elevated`/`bg-subtle` utility in the app was a silent no-op (the auth left panel's earlier `bg-surface` never rendered). Renamed to `--color-base/surface/elevated/subtle` in `app/globals.css`; the documented utilities now generate (verified in the production build CSS), and all existing `bg-*` token usage across the app now renders its intended color.
+- Implemented feature spec 04 (project dialogs & editor home) on branch `feature/project-dialogs`:
+  - `hooks/use-project-dialogs.ts` — dedicated hook owning dialog state (discriminated union: none/create/rename/delete), name form state, derived slug preview (`useMemo` over `slugify`), and the submission flag. Submits are mock-only (no API/persistence), so the loading window is unobservable for now but button disabled-states already key off `isSubmitting`.
+  - `lib/slug.ts` — `slugify()`: trim, lowercase, collapse non-alphanumeric runs to `-`, strip edge dashes; empty input yields "".
+  - `components/editor/project-dialogs.tsx` — Create / Rename / Delete dialogs on the generated shadcn (base-ui) primitives; `DialogContent` gets `rounded-3xl` per the modal radius convention. Create and rename use native `<form>` submission (Enter works) with `autoFocus` on the name input; rename's description shows the current project name; delete is input-less with a `variant="destructive"` confirm. Slug preview renders under the input with `aria-live="polite"`.
+  - `components/editor/editor-home.tsx` — centered home state: exact heading/description copy from the spec, `New Project` button with `Plus` icon, no cards.
+  - `components/editor/editor-workspace.tsx` — owns the hook; renders `EditorHome` in the center, mounts `ProjectDialogs`, wires home `New Project` → create, sidebar create/rename/delete → their dialogs. Navbar and sidebar open/close behavior untouched.
+  - `components/editor/project-sidebar.tsx` — renders mock owned/shared lists (new `components/editor/mock-projects.ts`, 3 owned + 2 shared records); per-row rename (`Pencil`) / delete (`Trash2`) ghost icon buttons with `aria-label`s, rendered only for owned projects; shared rows are display-only. Mobile backdrop scrim (`z-30`, `md:hidden`, `bg-black/40`) under the `z-40` sidebar closes it on tap.
+  - No `components/ui/*` files modified; no API calls or persistence.
 - Implemented feature spec 02 (editor chrome) on branch `feature/editor-chrome`:
   - `components/editor/editor-navbar.tsx` — client component, fixed-height (`h-12`) top navbar with left/center/right sections, sidebar toggle using `PanelLeftOpen`/`PanelLeftClose` driven by `isSidebarOpen`, `aria-label`/`aria-expanded` on the icon-only toggle, empty center and right sections, `bg-surface` background with `border-surface-border` bottom border.
   - `components/editor/project-sidebar.tsx` — client component, absolutely positioned floating overlay (`absolute inset-y-0 left-0`) so opening it never pushes page content, transform-based left slide-in (`translate-x` + `transition-transform`), `inert` and `aria-hidden` while closed, `Projects` header with close button, shadcn `Tabs` for "My Projects" and "Shared" with empty placeholder states, full-width `New Project` button with `Plus` icon at the bottom (optional `onNewProject` callback, unwired until a later spec).
@@ -57,11 +66,24 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Next Up
 
-- Implement feature spec 04 (project dialogs).
+- Next feature spec after spec 04 lands on `main`.
 
 ## Open Questions
 
 - None for this feature unit.
+
+## Verification Evidence (spec 04)
+
+- `npm run lint`, `npx tsc --noEmit`, and `npm run build` (Next 16.3.4, Turbopack) all clean in the worktree; build routes: `ƒ /`, `○ /editor`, `ƒ /sign-in/[[...sign-in]]`, `ƒ /sign-up/[[...sign-up]]` + Proxy.
+- Live headless-Chromium (Playwright) run against the worktree dev server on `http://localhost:3005` with a temporary API session (revoked after the test): **34/34 checks passed**, covering:
+  - home heading, description, and `New Project` button render on `/editor`;
+  - all four launch points (home button, sidebar create, sidebar rename, sidebar delete) open the correct dialog;
+  - slug preview updates live while typing (`Test` → `/test`, `Test Project 2!` → `/test-project-2`) and Enter submits the create form;
+  - rename dialog is prefilled, auto-focused, shows the current name in the description, and Enter submits;
+  - delete dialog has no input and a `destructive`-styled confirm button;
+  - owned rows expose rename+delete actions, shared rows expose neither;
+  - mobile viewport (390×844): backdrop scrim is present and `md:hidden`, tapping it closes the sidebar and unmounts the scrim.
+- Signed-in live checks use the 2026 Clerk dev-cookie protocol; see Session Notes for the updated handshake flow.
 
 ## Verification Evidence (spec 03)
 
@@ -89,7 +111,8 @@ Update this file whenever the current phase, active feature, or implementation s
 - Before production: claim/verify the app from the Clerk Dashboard and configure the production instance (`npx -y clerk@latest deploy`); temporary/development keys are not production-ready.
 - Feature spec 02 was implemented in the linked worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/editor-chrome` on branch `feature/editor-chrome`.
 - Feature spec 03 was implemented in the linked worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/auth` on branch `feature/auth`, fast-forward merged to `main`, and the worktree removed after verification.
-- Signed-in live testing on the dev instance requires the 2026 Clerk cookie protocol: a dev-browser handshake token (`__clerk_db_jwt`, from `GET https://<dev-instance>.clerk.accounts.dev/v1/client/handshake?domain=…&redirect_url=…`), the session JWT in `__session`, and its `iat` in `__client_uat`. Session tokens from `POST /v1/sessions/{id}/tokens` expire after ~60s — mint and use in the same command. A plain `Authorization: Bearer` header or `ck` header is not accepted by the middleware in this generation.
+- Feature spec 04 was implemented in the linked worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/project-dialogs` on branch `feature/project-dialogs`. Turbopack refuses a symlinked `node_modules` in a worktree ("Symlink … points out of the filesystem root") — use `cp -al <primary>/node_modules` (hardlinks) instead. A stale dev server from the primary checkout was occupying port 3002, so the verification server ran on 3005.
+- Signed-in live testing on the dev instance requires the 2026 Clerk cookie protocol (verified again for spec 04 on port 3005): the dev instance host is the decoded body of `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (base64 → `regular-swift-4842.clerk.accounts.dev`). The handshake `GET https://<dev-instance>/v1/client/handshake?domain=…&redirect_url=…` no longer sets a cookie — it returns an HTML redirect whose `?__clerk_handshake=<JWT>` payload carries the cookie directives; the real `__clerk_db_jwt` is the `dvb_…` value inside that payload. Cookies needed for the middleware to accept the session: `__session` (session JWT), `__client_uat` = that JWT's `iat` (seconds; `0` is rejected as missing), and `__clerk_db_jwt` = the `dvb_…` value. API gotchas this generation: `POST /v1/sessions` wants `user_id` form-encoded (query param → `form_param_missing`); `POST /v1/sessions/{id}/tokens` wants `Content-Type: application/json`; `/v1/users` is at `api.clerk.com`, not the dev-instance host (the instance host 404s it). Session tokens from the tokens endpoint expire after ~60s — mint and use in the same command. A plain `Authorization: Bearer` header or `ck` header is not accepted by the middleware in this generation.
 - The removed global layout header was the interim chrome from the initial Clerk setup; per spec 03 the user menu lives in the editor navbar.
 - The original checkout had an empty `.git` directory, so a local baseline repository was initialized before implementation. The completed design-system commit was merged into `main`, and the temporary linked worktree was removed after verification.
 - Generated `components/ui/*` files were created by the shadcn CLI and left unmodified afterward.
