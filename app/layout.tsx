@@ -44,6 +44,14 @@ const clerkAppearance = {
   },
 };
 
+/**
+ * Root layout: Geist font setup, global dark theme, and the `ClerkProvider`.
+ *
+ * The body is a full-height flex column so app routes (the editor
+ * workspace) can stretch to the viewport. Clerk's appearance is configured
+ * in `clerkAppearance` — dark theme with every variable overridden by app
+ * CSS variables, so Clerk chrome reuses the project design tokens.
+ */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html

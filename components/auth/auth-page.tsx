@@ -26,9 +26,16 @@ const features = [
   },
 ];
 
-// Two-panel auth layout matching the reference design: branding and a
-// prominent heading, description, and feature list on a slightly lighter
-// surface (large screens only), centered Clerk form on the right.
+/**
+ * Shared two-panel presentation layout for the sign-in and sign-up pages.
+ *
+ * Left panel (large screens only): branding lockup, heading, description,
+ * and feature list on `bg-elevated` — deliberately lighter than the right
+ * panel to match the reference design. Right panel: the Clerk form,
+ * vertically centered. Below `lg` the form renders full-width with no
+ * branding panel.
+ * @param children - The Clerk auth form (`<SignIn>` or `<SignUp>`).
+ */
 export function AuthPage({ children }: AuthPageProps) {
   return (
     <main className="flex flex-1">

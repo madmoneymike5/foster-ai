@@ -5,8 +5,11 @@ import { useState } from "react";
 import { EditorNavbar } from "@/components/editor/editor-navbar";
 import { ProjectSidebar } from "@/components/editor/project-sidebar";
 
-// Minimal editor workspace: navbar + projects sidebar around an empty
-// canvas area. Canvas behavior lands in a later spec.
+/**
+ * The editor shell around the (future) canvas: navbar, slide-in projects
+ * sidebar, and an empty main area. Canvas behavior lands in a later spec;
+ * this component owns only the sidebar open/closed state.
+ */
 export function EditorWorkspace() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 

@@ -10,6 +10,13 @@ interface EditorNavbarProps {
   onToggleSidebar: () => void;
 }
 
+/**
+ * Top chrome of the editor: projects sidebar toggle on the left, the
+ * signed-in user menu (Clerk `UserButton`) on the right.
+ * @param isSidebarOpen - Whether the projects sidebar is open; drives the
+ *   toggle icon, label, and `aria-expanded`.
+ * @param onToggleSidebar - Called when the user clicks the toggle button.
+ */
 export function EditorNavbar({
   isSidebarOpen,
   onToggleSidebar,

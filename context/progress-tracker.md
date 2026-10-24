@@ -8,7 +8,7 @@ Update this file whenever the current phase, active feature, or implementation s
 - Phase 2: Editor chrome complete
 - Phase 2.5: Clerk foundation installed (application linked, provider, proxy, auth pages, header chrome)
 - Phase 3: Clerk authentication feature integration (spec 03) complete
-- Phase 3.5: PR #2 open on `main` — spec 03 + auth-page redesign + vector branding + bg-token fix; auth routing made code-owned per CodeRabbit finding (auth-routes-fix)
+- Phase 3.5: PR #2 open on `main` — spec 03 + auth-page redesign + vector branding + bg-token fix; auth routing made code-owned per CodeRabbit finding (auth-routes-fix); JSDoc added to all eight PR-touched exported functions and a documentation convention codified in `code-standards.md` (docstrings-fix)
 
 ## Current Goal
 
