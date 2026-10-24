@@ -1,14 +1,11 @@
-export default function Home() {
-  return (
-    <main className="flex flex-1 items-center justify-center">
-      <h1>
-        Foster AI:
-      </h1>
-      <br />  
-      <p>
-        More with less. Full-stack systems architecture, engineered
-        with intent.
-      </p>
-    </main>
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+
+export default async function Home() {
+  const { isAuthenticated } = await auth();
+  redirect(
+    isAuthenticated
+      ? "/editor"
+      : (process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL ?? "/sign-in"),
   );
 }

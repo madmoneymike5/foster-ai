@@ -6,11 +6,12 @@ Update this file whenever the current phase, active feature, or implementation s
 
 - Phase 1: Design system foundation complete
 - Phase 2: Editor chrome complete
-- Phase 2.5: Clerk authentication integrated
+- Phase 2.5: Clerk foundation installed (application linked, provider, proxy, auth pages, header chrome)
+- Phase 3: Clerk authentication feature integration (spec 03) in progress
 
 ## Current Goal
 
-- Move to the next feature spec (03).
+- Implement feature spec 03 (auth) exactly as specified: `dark` theme with CSS-variable appearance overrides, two-panel auth pages, protected-first route protection with env-defined public routes, `/` redirects, and `UserButton` in the editor navbar.
 
 ## Completed
 
@@ -21,7 +22,7 @@ Update this file whenever the current phase, active feature, or implementation s
 - Added the shared `cn()` helper in `lib/utils.ts`.
 - Replaced the generated light theme with the dark-only project tokens and enabled the `dark` root class.
 - Verified lint, TypeScript, production build, `cn()` Tailwind conflict merging, and diff cleanliness.
-- Integrated Clerk authentication (committed to `main`, worktree `clerk-setup` removed after verification):
+- Clerk foundation installed (committed to `main`, worktree `clerk-setup` removed after verification; feature integration now in progress on `feature/auth`):
   - Linked the project to the existing Clerk application **Foster AI** (`app_3L7GPY3tqiqITsUp3BEUDpg6qoY`) via the Clerk CLI; no new or accountless application was created.
   - `@clerk/nextjs@^7.9.20` (current SDK generation): `ClerkProvider` wraps body content in `app/layout.tsx`; `proxy.ts` runs `clerkMiddleware()`; sign-in/sign-up catch-all pages at `/sign-in` and `/sign-up`.
   - Layout header (h-12, `bg-surface`, `border-surface-border`) shows the wordmark plus `SignInButton`/`SignUpButton` when signed out and `UserButton` when signed in.
@@ -36,11 +37,11 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## In Progress
 
-- None.
+- Feature spec 03 (auth) on branch `feature/auth`, worktree `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/auth`.
 
 ## Next Up
 
-- Implement feature spec 03.
+- After spec 03 is verified and merged to `main`: implement the next feature spec.
 
 ## Open Questions
 
