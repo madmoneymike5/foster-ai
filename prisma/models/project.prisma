@@ -1,0 +1,33 @@
+// use prisma-8
+
+enum ProjectStatus {
+  @@type("pg/text@1")
+  DRAFT = "DRAFT"
+  ARCHIVED = "ARCHIVED"
+}
+
+model Project {
+  id             Uuid                    @id @onCreate(uuid())
+  ownerId        String
+  name           String
+  description    String?
+  status         ProjectStatus           @default(DRAFT)
+  canvasJsonPath String?
+  createdAt      temporal.CreatedAtJsDate
+  updatedAt      temporal.UpdatedAtJsDate
+  collaborators  ProjectCollaborator[]
+
+  @@index([ownerId])
+  @@index([createdAt])
+}
+
+model ProjectCollaborator {
+  projectId Uuid
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  email     String
+  createdAt temporal.CreatedAtJsDate
+
+  @@id([projectId, email])
+  @@index([email])
+  @@index([projectId, createdAt])
+}

@@ -4,12 +4,12 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Phase 4: spec 04 — project dialogs & editor home — complete on `main` (spec 04 at `98f5606`, plus Sarah's Unicode-slug and CodeRabbit fixes committed Oct 27)
+- Phase 5: spec 05 — Prisma data models & database layer — in progress on `development`
 - Process change (Oct 27): all future implementation work lands on `development`; `main` advances only via `development → main` PRs. See the Branch and Merge Flow section in `ai-workflow-rules.md`.
 
 ## Current Goal
 
-- Implement feature spec 05 (Prisma) on `development`.
+- Implement feature spec 05 (Prisma) exactly as specified on `development`, then deploy a separate localhost server for review (main branch keeps `sarah-taylor.tail1644ec.ts.net:3001`).
 
 ## Completed
 
@@ -56,17 +56,34 @@ Update this file whenever the current phase, active feature, or implementation s
   - `components/editor/project-sidebar.tsx` — client component, absolutely positioned floating overlay (`absolute inset-y-0 left-0`) so opening it never pushes page content, transform-based left slide-in (`translate-x` + `transition-transform`), `inert` and `aria-hidden` while closed, `Projects` header with close button, shadcn `Tabs` for "My Projects" and "Shared" with empty placeholder states, full-width `New Project` button with `Plus` icon at the bottom (optional `onNewProject` callback, unwired until a later spec).
 - Verified the dialog pattern: the generated `components/ui/dialog.tsx` already exports `DialogTitle`, `DialogDescription`, and `DialogFooter`, with all colors resolved through `globals.css` tokens (`bg-popover`, `text-popover-foreground`, `border-border`, `bg-muted/50`). No new dialog component was built, per spec.
 
+- Implemented feature spec 05 (Prisma) on `development` in the permanent worktree:
+  - `prisma/models/project.prisma` — exactly `ProjectStatus` (`@@type("pg/text@1")`, `DRAFT`/`ARCHIVED`), `Project` (`id Uuid @id @onCreate(uuid())`, `ownerId` String (Clerk user id, no local User model), `name`, `description?`, `status @default(DRAFT)`, `canvasJsonPath?`, `createdAt temporal.CreatedAtJsDate`, `updatedAt temporal.UpdatedAtJsDate`, `collaborators` relation; indexes `ownerId`, `createdAt`), and `ProjectCollaborator` (`projectId Uuid` FK `@relation(onDelete: Cascade)`, `email`, `createdAt temporal.CreatedAtJsDate`; composite `@@id([projectId, email])`; indexes `email`, `[projectId, createdAt]`).
+  - `prisma/schema.prisma` — retained as marker-only root contract file (the `prisma orm init` template `User`/`Post` models were removed; the spec requires exactly the two models above, and a `User` model would conflict with the no-local-Clerk-model rule).
+  - `prisma.config.ts` — `definePrismaConfig` now imported from `prisma/config` (verified exported in `prisma@8.0.0-rc.27`), kept `contract: "./prisma/**/*.prisma"`, added `output: "./prisma"` so emit lands stable `prisma/contract.json` + `prisma/contract.d.ts`; `.env.local` dotenv loading kept with default no-override (runtime/deployment-provided vars win).
+  - Removed stale scaffold `prisma/db.ts` (imported an artifact emit never produced; nothing referenced it) and stale `prisma/schema.json`/`schema.d.ts`.
+  - `lib/prisma.ts` — `server-only`; loads `temporal-polyfill/full/global` first (Node v26.8.1 has no global `Temporal`; required peer of the ORM); exports typed `contract` (`contractFromJson<Contract>`) and `db` from `postgres({ contract, url })` (`@prisma/orm-postgres/runtime`); validates `DATABASE_URL` presence and `postgres:`/`postgresql:` protocol without echoing the URL (unsupported protocols stop with a clear error); one shared instance per process, cached on `globalThis` in all envs so Next.js dev hot-reload never opens a second pool; never closed per-request.
+  - Dependencies: added `temporal-polyfill` and `server-only` to `package.json` deps (both were already in `node_modules` as a peer/Next tooling dep). Prisma 7 deps (`@prisma/client`, `@prisma/adapter-pg`, `pg`) left in place — verified no application code imports them; removal wasn't part of the spec.
+  - Migration: read-only inspection first (`prisma db schema` — the configured Prisma Postgres `postgres` database was empty, a clean dev target). Then `prisma contract emit` (storageHash `ad13699f…e6e70b5`), `prisma migration plan --name init` (SQL preview reviewed: two tables, enum CHECK, composite PK, four authored indexes, cascade FK — 9 operations, additive), `prisma db migrate --advance-ref db` (applied 1 migration / 9 operations, marker advanced, ref `db` set), `prisma db verify` (marker + schema match contract). Migration history preserved at `migrations/app/20261027T1852_init/` + `migrations/snapshots/` + `migrations/app/refs/db.json` (committed).
+  - `eslint.config.mjs` — globalIgnores for generated artifacts (`prisma/contract.d.ts`, `prisma/contract.json`, `migrations/**`) and package-synced skill dirs (`.agents/.claude/.cursor/.devin`); 8 lint errors were all in emitted contract types.
+  - Review deployment: new user systemd unit `foster-ai-development.service` — `next dev -H localhost -p 3005` from the development worktree (localhost bind required by the Clerk dev-handshake constraint, same as main). Main `foster-ai.service` on :3001 untouched and verified active. Review URL: `http://localhost:3005`.
+  - Test-quality gate: applied before verification. This feature adds no unit tests (no test suite exists in the repo and the spec's Verification section is the acceptance evidence). Evidence mapping: contract shape → programmatic `contract.json` inspection (models/enum/cascade/composite PK/indexes/timestamp codecs all confirmed); migration correctness → reviewed SQL preview + `db migrate` apply + `db verify` full mode; runtime/type safety → `tsc --noEmit`, `npm run lint`, `npm run build` all green; deployment → live route probes.
+
 ## In Progress
 
 - None.
 
 ## Next Up
 
-- Implement feature spec 05 (Prisma) in the permanent `development` worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/development`.
+- Review spec 05 on `http://localhost:3005` (development) vs `http://localhost:3001` (main), then `development → dev` PR, then `dev → main` PR per Sarah's flow.
+- Next feature unit per the spec list after Sarah's review.
 
-## Open Questions
+## Verification Evidence (spec 05)
 
-- None for this feature unit.
+- `prisma contract emit` clean; emitted contract programmatically verified: models `[Project, ProjectCollaborator]`, enum `ProjectStatus { DRAFT, ARCHIVED }` on `pg/text@1` with generated membership CHECK, `Project.id` `pg/uuid@1` with client-side `uuid()` generator, `status` literal default `DRAFT`, `pg/timestamptz-date@1` timestamp codecs (JS `Date` interop), `Project → ProjectCollaborator` 1:N relation with `onDelete: cascade` FK, composite PK `[projectId, email]`, indexes `Project(ownerId)`, `Project(createdAt)`, `PC(email)`, `PC(projectId, createdAt)` (+ implicit `PC(projectId)` FK index).
+- Migration: planned as `migrations/app/20261027T1852_init` (from baseline, storageHash `ad13699f9d266993f19c54b0fc41e70109887dcc89719623a44cd0a6ee6e70b5`); SQL preview reviewed before applying; `prisma db migrate --advance-ref db` applied 1 migration (9 operations) in one transaction; `prisma db verify` → "Database marker and schema match contract". No `generate`, `migrate dev`, `db push`, or reset was used.
+- `npm run lint` clean, `npx tsc --noEmit` clean, `npm run build` green (routes `ƒ /`, `○ /editor`, `ƒ /sign-in/…`, `ƒ /sign-up/…` + Proxy).
+- Live probes on the separate review server `http://localhost:3005` (foster-ai-development.service): `GET /` → 307 → `/sign-in?redirect_url=…3005…`, `GET /editor` → 307 (protected-first), `GET /sign-in` / `GET /sign-up` → 200. Main service on :3001 verified active and redirecting as before. (The first `GET /` right after service start returned 404 — first-compile transient; all subsequent requests correct.)
+- No credentials or connection strings appear in any committed file or log; `prisma`/runtime output masks them (`postgres://****:****@…`).
 
 ## Verification Evidence (spec 04)
 
@@ -111,6 +128,9 @@ Update this file whenever the current phase, active feature, or implementation s
 - Feature spec 04 was implemented in the linked worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/project-dialogs` on branch `feature/project-dialogs`. Turbopack refuses a symlinked `node_modules` in a worktree ("Symlink … points out of the filesystem root") — use `cp -al <primary>/node_modules` (hardlinks) instead. A stale dev server from the primary checkout was occupying port 3002, so the verification server ran on 3005.
 - Signed-in live testing on the dev instance requires the 2026 Clerk cookie protocol (verified again for spec 04 on port 3005): the dev instance host is the decoded body of `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (base64 → `regular-swift-4842.clerk.accounts.dev`). The handshake `GET https://<dev-instance>/v1/client/handshake?domain=…&redirect_url=…` no longer sets a cookie — it returns an HTML redirect whose `?__clerk_handshake=<JWT>` payload carries the cookie directives; the real `__clerk_db_jwt` is the `dvb_…` value inside that payload. Cookies needed for the middleware to accept the session: `__session` (session JWT), `__client_uat` = that JWT's `iat` (seconds; `0` is rejected as missing), and `__clerk_db_jwt` = the `dvb_…` value. API gotchas this generation: `POST /v1/sessions` wants `user_id` form-encoded (query param → `form_param_missing`); `POST /v1/sessions/{id}/tokens` wants `Content-Type: application/json`; `/v1/users` is at `api.clerk.com`, not the dev-instance host (the instance host 404s it). Session tokens from the tokens endpoint expire after ~60s — mint and use in the same command. A plain `Authorization: Bearer` header or `ck` header is not accepted by the middleware in this generation.
 - The removed global layout header was the interim chrome from the initial Clerk setup; per spec 03 the user menu lives in the editor navbar.
+- Spec 05 review server: user systemd unit `foster-ai-development.service` (`~/.config/systemd/user/`), `next dev -H localhost -p 3005`, `WorkingDirectory` = the development worktree, enabled at boot. Host must be `localhost` (Clerk dev-handshake constraint, same as the main unit). Main service `foster-ai.service` (:3001) untouched. Stop/remove: `systemctl --user disable --now foster-ai-development.service`.
+- The `prisma orm init` template `User`/`Post` models that came with the pre-existing Prisma 8 scaffold were removed from `prisma/schema.prisma` (kept marker-only) — the spec requires exactly `Project`/`ProjectCollaborator`/`ProjectStatus`, and a local `User` model would contradict the no-local-Clerk-model rule. No database ever held those tables (the configured DB was empty before the init migration).
+- `prisma skills sync` drops `.agents/ .claude/ .cursor/ .devin/` + `skills-lock.json` (package-synced skill artifacts) and a root `prisma-8.md` welcome doc; these are gitignored and not committed. `.gitattributes` (pre-existing, from the Prisma 8 setup) marks emitted contract/migration artifacts `linguist-generated` and is committed with the feature.
 - The original checkout had an empty `.git` directory, so a local baseline repository was initialized before implementation. The completed design-system commit was merged into `main`, and the temporary linked worktree was removed after verification.
 - Generated `components/ui/*` files were created by the shadcn CLI and left unmodified afterward.
 - CSS LSP warnings for Tailwind v4 directives were marked false positives. A generated `scroll-area.tsx` unused-import hint was deferred without changing the generated file.

@@ -40,3 +40,14 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .tokensave
+node_modules/
+dist/
+.env
+
+# Prisma 8 agent-skill sync artifacts (prisma skills sync)
+.agents/
+.claude/
+.cursor/
+.devin/
+skills-lock.json
+prisma-8.md

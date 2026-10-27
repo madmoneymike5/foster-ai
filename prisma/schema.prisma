@@ -1,0 +1,3 @@
+// use prisma-8
+// Root contract source for the multi-file contract loaded via `contract: "./prisma/**/*.prisma"`.
+// Data models live under prisma/models/ (e.g. prisma/models/project.prisma).
