@@ -4,6 +4,7 @@
 
 - All implementation commits land directly on `development`. No feature branches for routine work.
 - `main` is integration-only: it advances solely via `development → main` pull requests. No one commits or pushes to `main` directly.
+- Enforced by the GitHub ruleset **"Protect main"** (ruleset id 25978006, `~DEFAULT_BRANCH`): `pull_request` rule with `required_approving_review_count: 0` (PR required, no approval needed — solo dev, local CodeRabbit is the review gate; required count 1 would deadlock since GitHub forbids author self-approval), `non_fast_forward` (no force pushes), `deletion` (branch cannot be deleted). Verified 2026-10-27: direct push rejected, scratch PR merged-CLEAN with zero approvals. Note: this repo's 2026-generation ruleset API needs `conditions.ref_name.include/exclude` (`target_id` is ignored — an empty condition set matches nothing) and `required_review_thread_resolution` is a required param.
 - Sarah runs CodeRabbit locally in VSC on `development` and fixes findings there before creating the PR.
 - The day-to-day workspace for `development` is the permanent linked worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/development`. The primary checkout stays on `main` for inspection, fetch, and branch administration only.
 - Ordinary pushes only. If history ever needs rewriting, use `--force-with-lease` — never bare `--force`.
