@@ -7,7 +7,7 @@ enum ProjectStatus {
 }
 
 model Project {
-  id             Uuid                    @id @onCreate(uuid())
+  id             Uuid                    @id @onCreate(uuid(7))
   ownerId        String
   name           String
   description    String?

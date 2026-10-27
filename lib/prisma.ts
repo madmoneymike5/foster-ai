@@ -42,10 +42,16 @@ function createDb() {
 type PrismaDb = ReturnType<typeof createDb>;
 
 // One shared pool per server process. Next.js dev hot-reloads modules, so cache
-// the instance on globalThis to avoid opening a fresh pool per reload.
+// the instance on globalThis during development to avoid opening a fresh pool
+// per reload. Production relies on normal module caching and does not retain a
+// global reference.
 const globalForPrisma = globalThis as typeof globalThis & {
   fosterPrismaDb?: PrismaDb;
 };
 
-export const db: PrismaDb =
-  globalForPrisma.fosterPrismaDb ?? (globalForPrisma.fosterPrismaDb = createDb());
+const dbInstance = globalForPrisma.fosterPrismaDb ?? createDb();
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.fosterPrismaDb = dbInstance;
+}
+
+export const db: PrismaDb = dbInstance;
