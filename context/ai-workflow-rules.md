@@ -1,5 +1,13 @@
 # Development Workflow
 
+## Branch and Merge Flow
+
+- All implementation commits land directly on `development`. No feature branches for routine work.
+- `main` is integration-only: it advances solely via `development → main` pull requests. No one commits or pushes to `main` directly.
+- Sarah runs CodeRabbit locally in VSC on `development` and fixes findings there before creating the PR.
+- The day-to-day workspace for `development` is the permanent linked worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/development`. The primary checkout stays on `main` for inspection, fetch, and branch administration only.
+- Ordinary pushes only. If history ever needs rewriting, use `--force-with-lease` — never bare `--force`.
+
 ## Approach
 
 Build this project incrementally using a spec-driven workflow. Context files define what to build, how to build it, and what the current state of progress is. Always implement against these specs — do not infer or invent behavior from scratch.

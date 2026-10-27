@@ -4,11 +4,12 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Phase 4: spec 04 — project dialogs & editor home — implemented and verified (branch `feature/project-dialogs`, merging to `main`)
+- Phase 4: spec 04 — project dialogs & editor home — complete on `main` (spec 04 at `98f5606`, plus Sarah's Unicode-slug and CodeRabbit fixes committed Oct 27)
+- Process change (Oct 27): all future implementation work lands on `development`; `main` advances only via `development → main` PRs. See the Branch and Merge Flow section in `ai-workflow-rules.md`.
 
 ## Current Goal
 
-- Merge spec 04 into `main`, then move to the next feature spec.
+- Implement feature spec 05 (Prisma) on `development`.
 
 ## Completed
 
@@ -61,7 +62,7 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Next Up
 
-- Next feature spec after spec 04 lands on `main`.
+- Implement feature spec 05 (Prisma) in the permanent `development` worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/development`.
 
 ## Open Questions
 
@@ -99,6 +100,7 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Session Notes
 
+- Branch flow change (2026-10-27, Sarah's decision): all implementation commits land directly on `development`; `main` advances only via `development → main` PRs, created after local CodeRabbit review in VSC. Cleanup performed: `development` fast-forwarded to `main` (`97bae87` → `46742d7`); all ten stale `feature/*` / `fix/*` branches deleted locally (four were rebased before their merges — `feature/auth`, `feature/branding`, `feature/clerk-setup`, `fix/tailnet-clerk-origin` — and verified patch-equivalent in main via `git cherry` before `-D`); `origin/feature/auth-and-branding` deleted remotely. Only `main` and `development` remain. The permanent `development` worktree lives at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/development` (hardlinked `node_modules`, `.env.local` copied). Spec 04 merged to `main` before this convention existed — grandfathered, not retro-PR'd.
 - Clerk setup was done in the linked worktree `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/clerk-setup` on branch `feature/clerk-setup`, merged to `main`, and the worktree removed with `git wt remove --confirmed-integrated` (branch is ahead of `origin/main`, which has no remote in the local baseline repo).
 - The `NEXT_PUBLIC_CLERK_*` route URL env vars and development keys were written to `.env.local` in the worktree, then copied to the primary checkout; the file is gitignored in both.
 - Dev server hostname constraint (documented in `~/.config/systemd/user/foster-ai.service`): the persistent `foster-ai.service` must run `next dev -H localhost -p 3001`, **not** `-H 127.0.0.1`. Clerk's dev handshake rewrites the request to `http://localhost:3001`; with a `127.0.0.1` bind, Next sees a different origin and self-proxies that rewrite into itself, 500ing every route (`Failed to proxy https://localhost:3001/` + EPROTO in the journal). Both `http://localhost:3001` and the tailnet Caddy TLS proxy (`https://sarah-taylor.tail1644ec.ts.net:3001` → `127.0.0.1:3001`) render correctly under the `localhost` bind. Never `rm -rf .next` under the running service.
