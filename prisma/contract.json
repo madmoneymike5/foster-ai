@@ -58,7 +58,7 @@
               "id": {
                 "nullable": false,
                 "type": {
-                  "codecId": "pg/uuid@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
@@ -164,7 +164,7 @@
               "projectId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "pg/uuid@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
@@ -237,8 +237,8 @@
                   "nullable": true
                 },
                 "id": {
-                  "codecId": "pg/uuid@1",
-                  "dataType": "pg/uuid",
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
                   "nullable": false
                 },
                 "name": {
@@ -311,8 +311,8 @@
                   "nullable": false
                 },
                 "projectId": {
-                  "codecId": "pg/uuid@1",
-                  "dataType": "pg/uuid",
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
                   "nullable": false
                 }
               },
@@ -388,10 +388,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "ad13699f9d266993f19c54b0fc41e70109887dcc89719623a44cd0a6ee6e70b5"
+    "storageHash": "b453671c664ec0bc2d0903716b96abd27c9ad17350cc575801e546857b819b29"
   },
   "execution": {
-    "executionHash": "cc8067b3863aa672c7fbaf49ac229d385163131626cb0065cfdc2788a6754d99",
+    "executionHash": "ee18492176aa426dbccd7c0b862441cc89bac2171fb84565a3844cfab79b885b",
     "mutations": {
       "defaults": [
         {
@@ -402,17 +402,6 @@
           "ref": {
             "entry": "Project",
             "field": "createdAt",
-            "namespace": "public"
-          }
-        },
-        {
-          "onCreate": {
-            "id": "uuidv7",
-            "kind": "generator"
-          },
-          "ref": {
-            "entry": "Project",
-            "field": "id",
             "namespace": "public"
           }
         },

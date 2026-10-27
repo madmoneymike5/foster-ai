@@ -1,38 +1,48 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 
-import { MOCK_PROJECTS, type Project } from "@/components/editor/mock-projects";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { ProjectListItem } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
 interface ProjectSidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  ownedProjects: ProjectListItem[];
+  sharedProjects: ProjectListItem[];
   onNewProject?: () => void;
-  onRenameProject?: (project: Project) => void;
-  onDeleteProject?: (project: Project) => void;
+  onRenameProject?: (project: ProjectListItem) => void;
+  onDeleteProject?: (project: ProjectListItem) => void;
 }
 
 interface ProjectItemProps {
-  project: Project;
-  onRename?: (project: Project) => void;
-  onDelete?: (project: Project) => void;
+  project: ProjectListItem;
+  onRename?: (project: ProjectListItem) => void;
+  onDelete?: (project: ProjectListItem) => void;
 }
 
 /**
- * One row in the project list. Rename and delete actions render only for
- * owned projects — shared/collaborator rows are display-only.
+ * One row in the project list. Clicking the name opens the project's workspace
+ * at /editor/[roomId]. Rename and delete actions render only for owned
+ * projects — shared/collaborator rows are display-only.
  */
 function ProjectItem({ project, onRename, onDelete }: ProjectItemProps) {
+  const router = useRouter();
   const showActions = !project.isShared && Boolean(onRename || onDelete);
 
   return (
     <li className="flex items-center gap-1">
-      <span className="flex-1 truncate py-1.5 text-sm text-copy-secondary" title={project.name}>
-        {project.name}
-      </span>
+      <Button
+        variant="ghost"
+        className="h-auto flex-1 truncate justify-start px-1 py-1.5 text-sm text-copy-secondary hover:text-copy-primary"
+        title={project.name}
+        onClick={() => router.push(`/editor/${project.id}`)}
+      >
+        <span className="truncate">{project.name}</span>
+      </Button>
       {showActions && (
         <span className="flex shrink-0 items-center">
           {onRename && (
@@ -64,9 +74,9 @@ function ProjectItem({ project, onRename, onDelete }: ProjectItemProps) {
 }
 
 interface ProjectListProps {
-  projects: Project[];
-  onRename?: (project: Project) => void;
-  onDelete?: (project: Project) => void;
+  projects: ProjectListItem[];
+  onRename?: (project: ProjectListItem) => void;
+  onDelete?: (project: ProjectListItem) => void;
 }
 
 function ProjectList({ projects, onRename, onDelete }: ProjectListProps) {
@@ -85,20 +95,19 @@ function ProjectList({ projects, onRename, onDelete }: ProjectListProps) {
 }
 
 /**
- * The slide-in projects sidebar: owned and shared project lists (mock data
- * for now), per-row rename/delete actions for owned projects, and a mobile
- * backdrop scrim that closes the sidebar when tapped.
+ * The slide-in projects sidebar: server-fetched owned and shared project lists,
+ * per-row rename/delete actions for owned projects, and a mobile backdrop scrim
+ * that closes the sidebar when tapped.
  */
 export function ProjectSidebar({
   isOpen,
   onClose,
+  ownedProjects,
+  sharedProjects,
   onNewProject,
   onRenameProject,
   onDeleteProject,
 }: ProjectSidebarProps) {
-  const ownedProjects = MOCK_PROJECTS.filter((project) => !project.isShared);
-  const sharedProjects = MOCK_PROJECTS.filter((project) => project.isShared);
-
   return (
     <>
       {/* Mobile scrim: tapping outside the sidebar closes it (spec 04). */}

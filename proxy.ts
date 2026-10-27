@@ -9,10 +9,11 @@ const isPublicRoute = createRouteMatcher([
   `${AUTH_SIGN_IN_ROUTE}(.*)`,
   `${AUTH_SIGN_UP_ROUTE}(.*)`,
 ]);
+const isProjectApiRoute = createRouteMatcher(["/api/projects(.*)"]);
 
 export default clerkMiddleware(
   async (auth, req) => {
-    if (!isPublicRoute(req)) await auth.protect();
+    if (!isPublicRoute(req) && !isProjectApiRoute(req)) await auth.protect();
   },
   {
     // Explicit redirect target for auth.protect() so the SDK never

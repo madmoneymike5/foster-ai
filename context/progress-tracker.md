@@ -4,12 +4,16 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Phase 5: spec 05 — Prisma data models & database layer — complete on `development`
+- Phase 7: spec 07 — wire editor home to the real project API — complete on `development` (uncommitted)
 - Process change (Oct 27): all future implementation work lands on `development`; `main` advances only via `development → main` PRs. See the Branch and Merge Flow section in `ai-workflow-rules.md`.
 
 ## Current Goal
 
-- Spec 05 is implemented and verified on `development`; review it on the separate localhost server while main remains on `sarah-taylor.tail1644ec.ts.net:3001`. Sarah will handle any later PRs; this agent must not PR to `development` or `main`.
+- Spec 07 is implemented and verified: server-fetched project lists into the sidebar, `useProjectActions` with real create/rename/delete against the project APIs, and dialog wiring (room ID preview, pre-filled rename, named delete).
+- ID-design decision (Sarah, 2026-10-28): project IDs are slug-based, not UUIDs — `Project.id` is a `String` slug-suffix value (e.g. `pricing-page-a1b2`) that is simultaneously the project ID, the `/editor/[roomId]` URL segment, and the Liveblocks room ID (specs 07/08/10 stay aligned). The migration `migrations/app/20261027T2058_slug_based_project_ids` changed `Project.id` and `ProjectCollaborator.projectId` from UUID to text; `POST /api/projects` accepts the client-generated `id`. This supersedes the UUID v7 ID strategy from specs 05/06; those UUID references below are historical baseline evidence only.
+- Generated project IDs truncate long slugs to keep the complete slug-suffix value within the validator's 100-character limit.
+- Project create, rename, and delete dialogs show mutation failure messages; create conflicts refresh the preview suffix so the user can retry with a new ID.
+- Sarah will review and commit later; this agent must not commit, push, or PR to `development` or `main`.
 
 ## Completed
 
@@ -68,14 +72,38 @@ Update this file whenever the current phase, active feature, or implementation s
   - Review deployment: new user systemd unit `foster-ai-development.service` — `next dev -H localhost -p 3005` from the development worktree (localhost bind required by the Clerk dev-handshake constraint, same as main). Main `foster-ai.service` on :3001 untouched and verified active. Review URL: `http://localhost:3005`.
   - Test-quality gate: applied before verification. This feature adds no unit tests (no test suite exists in the repo and the spec's Verification section is the acceptance evidence). Evidence mapping: contract shape → programmatic `contract.json` inspection (models/enum/cascade/composite PK/indexes/timestamp codecs all confirmed); migration correctness → reviewed SQL preview + `db migrate` apply + `db verify` full mode; runtime/type safety → `tsc --noEmit`, `npm run lint`, `npm run build` all green; deployment → live route probes.
 
+- Implemented feature spec 06 backend project APIs without UI wiring (the original UUID-based baseline; the ID portions below are superseded by spec 07):
+  - `app/api/projects/route.ts` — authenticated owner-scoped list and create handlers; missing project names default to `Untitled Project`.
+  - `app/api/projects/[projectId]/route.ts` — UUID-validated owner-only rename and delete handlers with `404` missing-project and `403` non-owner responses.
+  - `proxy.ts` — `/api/projects(.*)` remains inside Clerk middleware but bypasses navigation redirects so handlers can return JSON `401` responses.
+  - No schema, dependency, UI, commit, push, or PR changes were made.
+
 ## In Progress
 
 - None.
 
 ## Next Up
 
-- Review spec 05 on `http://localhost:3005` (development) vs `http://localhost:3001` (main). Sarah will handle any later PRs; this agent will not PR to `development` or `main`.
-- Next feature unit per the spec list after Sarah's review.
+- Sarah reviews the uncommitted spec 07 diff and commits when ready; this agent must not commit.
+- Spec 08 (editor workspace shell at `/editor/[roomId]`) next per the spec list.
+
+## Verification Evidence (spec 07)
+
+- Test-quality gate applied before verification. Kept checks protect real user-facing failure modes: server-side owned/shared data, shared rows being display-only, stable slug-suffix preview, create navigation, rename prefill/refresh, and delete naming/removal. No unit-test suite was added because the repository has no test runner and these checks exercise the actual browser/API contract.
+- `npm run lint`, `npx tsc --noEmit`, `npm run build`, `npx prisma db verify`, and `git diff --check` all pass; fresh LSP diagnostics contain no errors or blockers.
+- Live signed-in Chromium smoke run against `http://localhost:3005`: **12/12 checks passed** — `/editor` server-rendered home, shared project appears only in Shared with no rename/delete controls, create preview is `slug-suffix`, suffix stays stable while typing, create navigates to `/editor/<roomId>`, created project appears after a server refresh, rename pre-fills and refreshes, and delete names/removes the project.
+- The active-workspace delete branch is source-verified only; `/editor/[roomId]` is spec 08 and does not exist yet, so the live test used a non-active project for refresh behavior.
+- The development service was restarted on `localhost:3005` after the slug-ID contract migration so it loaded the current `pg/text` contract; database and contract marker match at storage hash `b453671c…b819b29`.
+- Temporary Clerk sessions were revoked, temporary DB fixtures were deleted, and the dev database is empty after verification. No credentials were written to the repository.
+
+## Verification Evidence (spec 06)
+
+- Historical UUID-based API evidence; the project ID strategy is superseded by spec 07's slug-based text IDs.
+- `npm run lint`, `npx tsc --noEmit`, and `npm run build` all pass; the build includes dynamic routes `/api/projects` and `/api/projects/[projectId]` plus Proxy.
+- Live unauthenticated probes on `http://localhost:3005`: GET and POST `/api/projects`, plus PATCH with an invalid path, all return `401` JSON rather than Clerk redirects.
+- Temporary authenticated Clerk session smoke checks passed: owner-scoped GET, POST with `{}` → `Untitled Project`, UUID v7 generation, list inclusion, PATCH rename, DELETE, malformed JSON `400`, invalid UUID `400`, and non-owner PATCH/DELETE `403`.
+- Corrected delete verification confirmed the deleted project ID is absent from the subsequent owner list.
+- Temporary Clerk session was revoked and all smoke fixtures were deleted. `foster-ai-development.service` is active on localhost:3005. No credentials were written to the repository.
 
 ## Verification Evidence (spec 05)
 
@@ -114,6 +142,7 @@ Update this file whenever the current phase, active feature, or implementation s
 - This feature adds reusable UI primitives and styling infrastructure only; it does not change application data boundaries or storage.
 - The project sidebar uses `absolute` positioning so it floats over the editor canvas inside the workspace's relative container. `z-40` keeps it above the canvas and below dialog overlays (`z-50`).
 - Route protection is protected-first in `proxy.ts` (public routes are the code-owned auth paths from `lib/auth-routes.ts` only); pages and future Route Handlers/Server Actions still need their own `await auth()`/ownership checks per `architecture-context.md` invariants — the proxy protects navigation, not data access.
+- Spec 06 project API routes are a narrow exception to protected-first redirects: `/api/projects(.*)` remains under Clerk middleware but skips `auth.protect()` so each handler can return the required JSON `401`; authenticated list results are owner-scoped by `ownerId`, and mutations re-check ownership before filtering the write by both `id` and `ownerId`.
 - `/editor` currently renders only the navbar + projects sidebar around an empty canvas area; it exists so the spec 03 authenticated redirect has a valid target. Spec 04 (project dialogs) wires the sidebar's `New Project` button; the canvas itself lands later.
 
 ## Session Notes

@@ -23,9 +23,9 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'ad13699f9d266993f19c54b0fc41e70109887dcc89719623a44cd0a6ee6e70b5'>;
+  StorageHashBase<'b453671c664ec0bc2d0903716b96abd27c9ad17350cc575801e546857b819b29'>;
 export type ExecutionHash =
-  ExecutionHashBase<'cc8067b3863aa672c7fbaf49ac229d385163131626cb0065cfdc2788a6754d99'>;
+  ExecutionHashBase<'ee18492176aa426dbccd7c0b862441cc89bac2171fb84565a3844cfab79b885b'>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
 
@@ -357,8 +357,8 @@ type ContractBase = Omit<
                   readonly many: false;
                 };
                 readonly id: {
-                  readonly dataType: 'pg/uuid';
-                  readonly codecId: 'pg/uuid@1';
+                  readonly dataType: 'pg/text';
+                  readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                   readonly many: false;
                 };
@@ -424,8 +424,8 @@ type ContractBase = Omit<
                   readonly many: false;
                 };
                 readonly projectId: {
-                  readonly dataType: 'pg/uuid';
-                  readonly codecId: 'pg/uuid@1';
+                  readonly dataType: 'pg/text';
+                  readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                   readonly many: false;
                 };
@@ -513,7 +513,7 @@ type ContractBase = Omit<
               };
               readonly id: {
                 readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/uuid@1' };
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly name: {
                 readonly nullable: false;
@@ -578,7 +578,7 @@ type ContractBase = Omit<
               };
               readonly projectId: {
                 readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/uuid@1' };
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
             };
             readonly relations: {
@@ -661,14 +661,6 @@ type ContractBase = Omit<
           readonly ref: {
             readonly entry: 'Project';
             readonly field: 'createdAt';
-            readonly namespace: 'public';
-          };
-        },
-        {
-          readonly onCreate: { readonly id: 'uuidv7'; readonly kind: 'generator' };
-          readonly ref: {
-            readonly entry: 'Project';
-            readonly field: 'id';
             readonly namespace: 'public';
           };
         },

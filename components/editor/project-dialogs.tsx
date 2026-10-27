@@ -3,57 +3,55 @@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { UseProjectDialogs } from "@/hooks/use-project-dialogs";
+import type { UseProjectActions } from "@/hooks/use-project-actions";
 import { cn } from "@/lib/utils";
 
 interface ProjectDialogsProps {
-  dialogs: UseProjectDialogs;
+  actions: UseProjectActions;
 }
 
 interface NameFieldProps {
-  dialogs: UseProjectDialogs;
   label: string;
   placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+  /** Optional live preview rendered under the input (the create dialog's room ID). */
+  preview?: string;
 }
 
 /**
- * Name input with live slug preview for the create and rename dialogs.
- * The preview re-derives from the input on every keystroke.
+ * Name input, optionally with a live preview under the field. Used by the
+ * create dialog (room ID preview) and the rename dialog (no preview — the
+ * project/room ID is unchanged by a rename).
  */
-function NameField({ dialogs, label, placeholder }: NameFieldProps) {
-  const { name, slug, setName } = dialogs;
-
+function NameField({ label, placeholder, value, onChange, preview }: NameFieldProps) {
   return (
     <div className="flex flex-col gap-2">
       <label className="flex flex-col gap-1.5 text-sm text-copy-secondary">
         {label}
-        <Input
-          autoFocus
-          value={name}
-          placeholder={placeholder}
-          onChange={(event) => setName(event.target.value)}
-        />
+        <Input autoFocus value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
       </label>
-      <p
-        aria-live="polite"
-        className={cn("font-mono text-xs", slug ? "text-copy-muted" : "text-copy-faint")}
-      >
-        /{slug || "—"}
-      </p>
+      {preview !== undefined && (
+        <p aria-live="polite" className={cn("font-mono text-xs", preview ? "text-copy-muted" : "text-copy-faint")}>
+          /{preview || "—"}
+        </p>
+      )}
     </div>
   );
 }
 
 /**
  * Renders whichever project dialog the hook says is open: create, rename, or
- * delete. Mock-only — submissions close the dialog without persistence.
+ * delete. Submissions hit the project API through the hook; the create dialog
+ * previews the room ID the project will get, and the delete dialog names the
+ * project that will be removed.
  */
-export function ProjectDialogs({ dialogs }: ProjectDialogsProps) {
-  const { dialog, slug, isSubmitting, close, submit } = dialogs;
+export function ProjectDialogs({ actions }: ProjectDialogsProps) {
+  const { dialog, name, createRoomId, isSubmitting, error, setName, close, submit } = actions;
 
   const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    submit();
+    void submit();
   };
 
   return (
@@ -71,12 +69,19 @@ export function ProjectDialogs({ dialogs }: ProjectDialogsProps) {
               <DialogDescription>Set up a new architecture workspace.</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleFormSubmit}>
-              <NameField dialogs={dialogs} label="Project name" placeholder="My project" />
+              <NameField
+                label="Project name"
+                placeholder="My project"
+                value={name}
+                onChange={setName}
+                preview={createRoomId}
+              />
+              {error && <p role="alert" className="text-sm text-state-error">{error}</p>}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={close}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={!slug || isSubmitting}>
+                <Button type="submit" disabled={!name.trim() || isSubmitting}>
                   Create project
                 </Button>
               </DialogFooter>
@@ -100,12 +105,13 @@ export function ProjectDialogs({ dialogs }: ProjectDialogsProps) {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleFormSubmit}>
-              <NameField dialogs={dialogs} label="New name" placeholder="Project name" />
+              <NameField label="New name" placeholder="Project name" value={name} onChange={setName} />
+              {error && <p role="alert" className="text-sm text-state-error">{error}</p>}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={close}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={!slug || isSubmitting}>
+                <Button type="submit" disabled={!name.trim() || isSubmitting}>
                   Save
                 </Button>
               </DialogFooter>
@@ -130,11 +136,12 @@ export function ProjectDialogs({ dialogs }: ProjectDialogsProps) {
                 cannot be undone.
               </DialogDescription>
             </DialogHeader>
+            {error && <p role="alert" className="text-sm text-state-error">{error}</p>}
             <DialogFooter>
               <Button variant="outline" onClick={close}>
                 Cancel
               </Button>
-              <Button variant="destructive" disabled={isSubmitting} onClick={submit}>
+              <Button variant="destructive" disabled={isSubmitting} onClick={() => void submit()}>
                 Delete project
               </Button>
             </DialogFooter>
