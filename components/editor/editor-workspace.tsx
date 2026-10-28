@@ -6,18 +6,25 @@ import { EditorNavbar } from "@/components/editor/editor-navbar";
 import { EditorHome } from "@/components/editor/editor-home";
 import { ProjectDialogs } from "@/components/editor/project-dialogs";
 import { ProjectSidebar } from "@/components/editor/project-sidebar";
-import { useProjectDialogs } from "@/hooks/use-project-dialogs";
+import { useProjectActions } from "@/hooks/use-project-actions";
+import type { ProjectListItem } from "@/lib/projects";
+
+interface EditorWorkspaceProps {
+  ownedProjects: ProjectListItem[];
+  sharedProjects: ProjectListItem[];
+}
 
 /**
  * The editor shell: navbar, slide-in projects sidebar, and the center area.
  *
- * Before a project is open (spec 04) the center shows the home state; this
- * component owns the sidebar open/closed state and the project-dialog hook
- * that wires the home button and every sidebar action into the dialogs.
+ * The project lists are fetched server-side (see app/editor/page.tsx) and
+ * passed in as props — no client-side fetching. This component owns the
+ * sidebar open/closed state and the useProjectActions hook that wires the
+ * home button, the sidebar rows, and every dialog to the project API.
  */
-export function EditorWorkspace() {
+export function EditorWorkspace({ ownedProjects, sharedProjects }: EditorWorkspaceProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const dialogs = useProjectDialogs();
+  const actions = useProjectActions();
 
   return (
     <div className="flex flex-1 flex-col">
@@ -29,15 +36,17 @@ export function EditorWorkspace() {
         <ProjectSidebar
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
-          onNewProject={dialogs.openCreate}
-          onRenameProject={dialogs.openRename}
-          onDeleteProject={dialogs.openDelete}
+          ownedProjects={ownedProjects}
+          sharedProjects={sharedProjects}
+          onNewProject={actions.openCreate}
+          onRenameProject={actions.openRename}
+          onDeleteProject={actions.openDelete}
         />
         <main className="flex flex-1 items-center justify-center">
-          <EditorHome onNewProject={dialogs.openCreate} />
+          <EditorHome onNewProject={actions.openCreate} />
         </main>
       </div>
-      <ProjectDialogs dialogs={dialogs} />
+      <ProjectDialogs actions={actions} />
     </div>
   );
 }

@@ -1,0 +1,409 @@
+[
+  {
+    "id": "schema.public",
+    "label": "Create schema \"public\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [],
+    "execute": [
+      {
+        "description": "Create schema \"public\"",
+        "sql": "CREATE SCHEMA IF NOT EXISTS \"public\"",
+        "params": []
+      }
+    ],
+    "postcheck": []
+  },
+  {
+    "id": "table.Project",
+    "label": "Create table \"Project\"",
+    "summary": "Creates table \"Project\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Project"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Project\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Project\""
+        ],
+        "expectation": {
+          "expects": "absent",
+          "object": "table \"Project\""
+        }
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Project\"",
+        "sql": "CREATE TABLE \"public\".\"Project\" (\n  \"canvasJsonPath\" text,\n  \"createdAt\" timestamptz NOT NULL,\n  \"description\" text,\n  \"id\" uuid NOT NULL,\n  \"name\" text NOT NULL,\n  \"ownerId\" text NOT NULL,\n  \"status\" text DEFAULT 'DRAFT' NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"Project_status_check_bee39d02\" CHECK (\"status\" IN ('DRAFT', 'ARCHIVED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Project\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_class\" AS \"c\" WHERE (\"c\".\"oid\" = to_regclass($1) AND (\"c\".\"relkind\" = $2 OR \"c\".\"relkind\" = $3))) AS \"result\"",
+        "params": [
+          "\"public\".\"Project\"",
+          "r",
+          "p"
+        ],
+        "expectation": {
+          "expects": "present",
+          "object": "table \"Project\""
+        }
+      }
+    ]
+  },
+  {
+    "id": "table.ProjectCollaborator",
+    "label": "Create table \"ProjectCollaborator\"",
+    "summary": "Creates table \"ProjectCollaborator\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "ProjectCollaborator"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"ProjectCollaborator\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ProjectCollaborator\""
+        ],
+        "expectation": {
+          "expects": "absent",
+          "object": "table \"ProjectCollaborator\""
+        }
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"ProjectCollaborator\"",
+        "sql": "CREATE TABLE \"public\".\"ProjectCollaborator\" (\n  \"createdAt\" timestamptz NOT NULL,\n  \"email\" text NOT NULL,\n  \"projectId\" uuid NOT NULL,\n  PRIMARY KEY (\"projectId\", \"email\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"ProjectCollaborator\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_class\" AS \"c\" WHERE (\"c\".\"oid\" = to_regclass($1) AND (\"c\".\"relkind\" = $2 OR \"c\".\"relkind\" = $3))) AS \"result\"",
+        "params": [
+          "\"public\".\"ProjectCollaborator\"",
+          "r",
+          "p"
+        ],
+        "expectation": {
+          "expects": "present",
+          "object": "table \"ProjectCollaborator\""
+        }
+      }
+    ]
+  },
+  {
+    "id": "index.Project.Project_createdAt_idx_9575dbd7",
+    "label": "Create index \"Project_createdAt_idx_9575dbd7\" on \"Project\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Project_createdAt_idx_9575dbd7",
+        "table": "Project"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Project_createdAt_idx_9575dbd7\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Project_createdAt_idx_9575dbd7\""
+        ],
+        "expectation": {
+          "expects": "absent",
+          "object": "index \"Project_createdAt_idx_9575dbd7\""
+        }
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Project_createdAt_idx_9575dbd7\"",
+        "sql": "CREATE INDEX \"Project_createdAt_idx_9575dbd7\" ON \"public\".\"Project\" (\"createdAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Project_createdAt_idx_9575dbd7\" exists on \"Project\" with the planned definition",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_class\" AS \"c\" INNER JOIN \"pg_index\" AS \"i\" ON \"i\".\"indexrelid\" = \"c\".\"oid\" INNER JOIN \"pg_am\" AS \"m\" ON \"m\".\"oid\" = \"c\".\"relam\" WHERE (\"c\".\"oid\" = to_regclass($1) AND (\"c\".\"relkind\" = $2 OR \"c\".\"relkind\" = $3) AND \"i\".\"indrelid\" = to_regclass($4) AND NOT (\"i\".\"indisunique\") AND \"m\".\"amname\" = $5 AND (\"i\".\"indexprs\" IS NULL AND (SELECT coalesce(jsonb_agg(key_attribute.attname ORDER BY key_column.position), '[]'::jsonb) FROM unnest(\"i\".\"indkey\"::int2[]) WITH ORDINALITY AS key_column(attnum, position) JOIN pg_attribute key_attribute ON key_attribute.attrelid = \"i\".\"indrelid\" AND key_attribute.attnum = key_column.attnum) = ($6)::jsonb) AND \"i\".\"indpred\" IS NULL)) AS \"result\"",
+        "params": [
+          "\"public\".\"Project_createdAt_idx_9575dbd7\"",
+          "i",
+          "I",
+          "\"public\".\"Project\"",
+          "btree",
+          "[\"createdAt\"]"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Project.Project_ownerId_idx_e2d0c1ef",
+    "label": "Create index \"Project_ownerId_idx_e2d0c1ef\" on \"Project\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Project_ownerId_idx_e2d0c1ef",
+        "table": "Project"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Project_ownerId_idx_e2d0c1ef\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Project_ownerId_idx_e2d0c1ef\""
+        ],
+        "expectation": {
+          "expects": "absent",
+          "object": "index \"Project_ownerId_idx_e2d0c1ef\""
+        }
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Project_ownerId_idx_e2d0c1ef\"",
+        "sql": "CREATE INDEX \"Project_ownerId_idx_e2d0c1ef\" ON \"public\".\"Project\" (\"ownerId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Project_ownerId_idx_e2d0c1ef\" exists on \"Project\" with the planned definition",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_class\" AS \"c\" INNER JOIN \"pg_index\" AS \"i\" ON \"i\".\"indexrelid\" = \"c\".\"oid\" INNER JOIN \"pg_am\" AS \"m\" ON \"m\".\"oid\" = \"c\".\"relam\" WHERE (\"c\".\"oid\" = to_regclass($1) AND (\"c\".\"relkind\" = $2 OR \"c\".\"relkind\" = $3) AND \"i\".\"indrelid\" = to_regclass($4) AND NOT (\"i\".\"indisunique\") AND \"m\".\"amname\" = $5 AND (\"i\".\"indexprs\" IS NULL AND (SELECT coalesce(jsonb_agg(key_attribute.attname ORDER BY key_column.position), '[]'::jsonb) FROM unnest(\"i\".\"indkey\"::int2[]) WITH ORDINALITY AS key_column(attnum, position) JOIN pg_attribute key_attribute ON key_attribute.attrelid = \"i\".\"indrelid\" AND key_attribute.attnum = key_column.attnum) = ($6)::jsonb) AND \"i\".\"indpred\" IS NULL)) AS \"result\"",
+        "params": [
+          "\"public\".\"Project_ownerId_idx_e2d0c1ef\"",
+          "i",
+          "I",
+          "\"public\".\"Project\"",
+          "btree",
+          "[\"ownerId\"]"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.ProjectCollaborator.ProjectCollaborator_email_idx_46df9cad",
+    "label": "Create index \"ProjectCollaborator_email_idx_46df9cad\" on \"ProjectCollaborator\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "ProjectCollaborator_email_idx_46df9cad",
+        "table": "ProjectCollaborator"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"ProjectCollaborator_email_idx_46df9cad\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ProjectCollaborator_email_idx_46df9cad\""
+        ],
+        "expectation": {
+          "expects": "absent",
+          "object": "index \"ProjectCollaborator_email_idx_46df9cad\""
+        }
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"ProjectCollaborator_email_idx_46df9cad\"",
+        "sql": "CREATE INDEX \"ProjectCollaborator_email_idx_46df9cad\" ON \"public\".\"ProjectCollaborator\" (\"email\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"ProjectCollaborator_email_idx_46df9cad\" exists on \"ProjectCollaborator\" with the planned definition",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_class\" AS \"c\" INNER JOIN \"pg_index\" AS \"i\" ON \"i\".\"indexrelid\" = \"c\".\"oid\" INNER JOIN \"pg_am\" AS \"m\" ON \"m\".\"oid\" = \"c\".\"relam\" WHERE (\"c\".\"oid\" = to_regclass($1) AND (\"c\".\"relkind\" = $2 OR \"c\".\"relkind\" = $3) AND \"i\".\"indrelid\" = to_regclass($4) AND NOT (\"i\".\"indisunique\") AND \"m\".\"amname\" = $5 AND (\"i\".\"indexprs\" IS NULL AND (SELECT coalesce(jsonb_agg(key_attribute.attname ORDER BY key_column.position), '[]'::jsonb) FROM unnest(\"i\".\"indkey\"::int2[]) WITH ORDINALITY AS key_column(attnum, position) JOIN pg_attribute key_attribute ON key_attribute.attrelid = \"i\".\"indrelid\" AND key_attribute.attnum = key_column.attnum) = ($6)::jsonb) AND \"i\".\"indpred\" IS NULL)) AS \"result\"",
+        "params": [
+          "\"public\".\"ProjectCollaborator_email_idx_46df9cad\"",
+          "i",
+          "I",
+          "\"public\".\"ProjectCollaborator\"",
+          "btree",
+          "[\"email\"]"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.ProjectCollaborator.ProjectCollaborator_projectId_createdAt_idx_d2d6484f",
+    "label": "Create index \"ProjectCollaborator_projectId_createdAt_idx_d2d6484f\" on \"ProjectCollaborator\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "ProjectCollaborator_projectId_createdAt_idx_d2d6484f",
+        "table": "ProjectCollaborator"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"ProjectCollaborator_projectId_createdAt_idx_d2d6484f\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ProjectCollaborator_projectId_createdAt_idx_d2d6484f\""
+        ],
+        "expectation": {
+          "expects": "absent",
+          "object": "index \"ProjectCollaborator_projectId_createdAt_idx_d2d6484f\""
+        }
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"ProjectCollaborator_projectId_createdAt_idx_d2d6484f\"",
+        "sql": "CREATE INDEX \"ProjectCollaborator_projectId_createdAt_idx_d2d6484f\" ON \"public\".\"ProjectCollaborator\" (\"projectId\", \"createdAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"ProjectCollaborator_projectId_createdAt_idx_d2d6484f\" exists on \"ProjectCollaborator\" with the planned definition",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_class\" AS \"c\" INNER JOIN \"pg_index\" AS \"i\" ON \"i\".\"indexrelid\" = \"c\".\"oid\" INNER JOIN \"pg_am\" AS \"m\" ON \"m\".\"oid\" = \"c\".\"relam\" WHERE (\"c\".\"oid\" = to_regclass($1) AND (\"c\".\"relkind\" = $2 OR \"c\".\"relkind\" = $3) AND \"i\".\"indrelid\" = to_regclass($4) AND NOT (\"i\".\"indisunique\") AND \"m\".\"amname\" = $5 AND (\"i\".\"indexprs\" IS NULL AND (SELECT coalesce(jsonb_agg(key_attribute.attname ORDER BY key_column.position), '[]'::jsonb) FROM unnest(\"i\".\"indkey\"::int2[]) WITH ORDINALITY AS key_column(attnum, position) JOIN pg_attribute key_attribute ON key_attribute.attrelid = \"i\".\"indrelid\" AND key_attribute.attnum = key_column.attnum) = ($6)::jsonb) AND \"i\".\"indpred\" IS NULL)) AS \"result\"",
+        "params": [
+          "\"public\".\"ProjectCollaborator_projectId_createdAt_idx_d2d6484f\"",
+          "i",
+          "I",
+          "\"public\".\"ProjectCollaborator\"",
+          "btree",
+          "[\"projectId\",\"createdAt\"]"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.ProjectCollaborator.ProjectCollaborator_projectId_idx_a96e4d92",
+    "label": "Create index \"ProjectCollaborator_projectId_idx_a96e4d92\" on \"ProjectCollaborator\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "ProjectCollaborator_projectId_idx_a96e4d92",
+        "table": "ProjectCollaborator"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"ProjectCollaborator_projectId_idx_a96e4d92\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ProjectCollaborator_projectId_idx_a96e4d92\""
+        ],
+        "expectation": {
+          "expects": "absent",
+          "object": "index \"ProjectCollaborator_projectId_idx_a96e4d92\""
+        }
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"ProjectCollaborator_projectId_idx_a96e4d92\"",
+        "sql": "CREATE INDEX \"ProjectCollaborator_projectId_idx_a96e4d92\" ON \"public\".\"ProjectCollaborator\" (\"projectId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"ProjectCollaborator_projectId_idx_a96e4d92\" exists on \"ProjectCollaborator\" with the planned definition",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_class\" AS \"c\" INNER JOIN \"pg_index\" AS \"i\" ON \"i\".\"indexrelid\" = \"c\".\"oid\" INNER JOIN \"pg_am\" AS \"m\" ON \"m\".\"oid\" = \"c\".\"relam\" WHERE (\"c\".\"oid\" = to_regclass($1) AND (\"c\".\"relkind\" = $2 OR \"c\".\"relkind\" = $3) AND \"i\".\"indrelid\" = to_regclass($4) AND NOT (\"i\".\"indisunique\") AND \"m\".\"amname\" = $5 AND (\"i\".\"indexprs\" IS NULL AND (SELECT coalesce(jsonb_agg(key_attribute.attname ORDER BY key_column.position), '[]'::jsonb) FROM unnest(\"i\".\"indkey\"::int2[]) WITH ORDINALITY AS key_column(attnum, position) JOIN pg_attribute key_attribute ON key_attribute.attrelid = \"i\".\"indrelid\" AND key_attribute.attnum = key_column.attnum) = ($6)::jsonb) AND \"i\".\"indpred\" IS NULL)) AS \"result\"",
+        "params": [
+          "\"public\".\"ProjectCollaborator_projectId_idx_a96e4d92\"",
+          "i",
+          "I",
+          "\"public\".\"ProjectCollaborator\"",
+          "btree",
+          "[\"projectId\"]"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.ProjectCollaborator.ProjectCollaborator_projectId_fkey",
+    "label": "Add foreign key \"ProjectCollaborator_projectId_fkey\" on \"ProjectCollaborator\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "ProjectCollaborator_projectId_fkey",
+        "table": "ProjectCollaborator"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"ProjectCollaborator_projectId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "ProjectCollaborator_projectId_fkey",
+          "public",
+          "\"public\".\"ProjectCollaborator\""
+        ],
+        "expectation": {
+          "expects": "absent",
+          "object": "FK \"ProjectCollaborator_projectId_fkey\" on \"ProjectCollaborator\""
+        }
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"ProjectCollaborator_projectId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"ProjectCollaborator\"\nADD CONSTRAINT \"ProjectCollaborator_projectId_fkey\"\nFOREIGN KEY (\"projectId\")\nREFERENCES \"public\".\"Project\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"ProjectCollaborator_projectId_fkey\" exists with the planned columns, referenced table and actions",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3) AND \"c\".\"contype\" = $4 AND (SELECT coalesce(jsonb_agg(key_attribute.attname ORDER BY key_column.position), '[]'::jsonb) FROM unnest(\"c\".\"conkey\"::int2[]) WITH ORDINALITY AS key_column(attnum, position) JOIN pg_attribute key_attribute ON key_attribute.attrelid = \"c\".\"conrelid\" AND key_attribute.attnum = key_column.attnum) = ($5)::jsonb AND \"c\".\"confrelid\" = to_regclass($6) AND (SELECT coalesce(jsonb_agg(key_attribute.attname ORDER BY key_column.position), '[]'::jsonb) FROM unnest(\"c\".\"confkey\"::int2[]) WITH ORDINALITY AS key_column(attnum, position) JOIN pg_attribute key_attribute ON key_attribute.attrelid = \"c\".\"confrelid\" AND key_attribute.attnum = key_column.attnum) = ($7)::jsonb AND \"c\".\"confdeltype\" = $8 AND \"c\".\"confupdtype\" = $9)) AS \"result\"",
+        "params": [
+          "ProjectCollaborator_projectId_fkey",
+          "public",
+          "\"public\".\"ProjectCollaborator\"",
+          "f",
+          "[\"projectId\"]",
+          "\"public\".\"Project\"",
+          "[\"id\"]",
+          "c",
+          "a"
+        ]
+      }
+    ]
+  }
+]

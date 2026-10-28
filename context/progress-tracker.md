@@ -4,11 +4,16 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Phase 4: spec 04 — project dialogs & editor home — implemented and verified (branch `feature/project-dialogs`, merging to `main`)
+- Phase 7: spec 07 — wire editor home to the real project API — complete on `development` and under review in PR #4
+- Process change (Oct 27): all future implementation work lands on `development`; `main` advances only via `development → main` PRs. See the Branch and Merge Flow section in `ai-workflow-rules.md`.
 
 ## Current Goal
 
-- Merge spec 04 into `main`, then move to the next feature spec.
+- Spec 07 is implemented and verified: server-fetched project lists into the sidebar, `useProjectActions` with real create/rename/delete against the project APIs, and dialog wiring (room ID preview, pre-filled rename, named delete).
+- ID-design decision (Sarah, 2026-10-28): project IDs are slug-based, not UUIDs — `Project.id` is a `String` slug-suffix value (e.g. `pricing-page-a1b2`) that is simultaneously the project ID, the `/editor/[roomId]` URL segment, and the Liveblocks room ID (specs 07/08/10 stay aligned). The migration `migrations/app/20261027T2058_slug_based_project_ids` changed `Project.id` and `ProjectCollaborator.projectId` from UUID to text; `POST /api/projects` accepts the client-generated `id`. This supersedes the UUID v7 ID strategy from specs 05/06; those UUID references below are historical baseline evidence only.
+- Generated project IDs truncate long slugs to keep the complete slug-suffix value within the validator's 100-character limit.
+- Project create, rename, and delete dialogs show mutation failure messages; create conflicts refresh the preview suffix so the user can retry with a new ID.
+- PR #4 includes the follow-up validation, documentation, dependency, and JSDoc fixes requested by CodeRabbit; the branch is ready for review.
 
 ## Completed
 
@@ -55,17 +60,64 @@ Update this file whenever the current phase, active feature, or implementation s
   - `components/editor/project-sidebar.tsx` — client component, absolutely positioned floating overlay (`absolute inset-y-0 left-0`) so opening it never pushes page content, transform-based left slide-in (`translate-x` + `transition-transform`), `inert` and `aria-hidden` while closed, `Projects` header with close button, shadcn `Tabs` for "My Projects" and "Shared" with empty placeholder states, full-width `New Project` button with `Plus` icon at the bottom (optional `onNewProject` callback, unwired until a later spec).
 - Verified the dialog pattern: the generated `components/ui/dialog.tsx` already exports `DialogTitle`, `DialogDescription`, and `DialogFooter`, with all colors resolved through `globals.css` tokens (`bg-popover`, `text-popover-foreground`, `border-border`, `bg-muted/50`). No new dialog component was built, per spec.
 
+- Implemented feature spec 05 (Prisma) on `development` in the permanent worktree:
+  - `prisma/models/project.prisma` — exactly `ProjectStatus` (`@@type("pg/text@1")`, `DRAFT`/`ARCHIVED`), `Project` (`id Uuid @id @onCreate(uuid(7))`, `ownerId` String (Clerk user id, no local User model), `name`, `description?`, `status @default(DRAFT)`, `canvasJsonPath?`, `createdAt temporal.CreatedAtJsDate`, `updatedAt temporal.UpdatedAtJsDate`, `collaborators` relation; indexes `ownerId`, `createdAt`), and `ProjectCollaborator` (`projectId Uuid` FK `@relation(onDelete: Cascade)`, `email`, `createdAt temporal.CreatedAtJsDate`; composite `@@id([projectId, email])`; indexes `email`, `[projectId, createdAt]`).
+  - `prisma/schema.prisma` — retained as marker-only root contract file (the `prisma orm init` template `User`/`Post` models were removed; the spec requires exactly the two models above, and a `User` model would conflict with the no-local-Clerk-model rule).
+  - `prisma.config.ts` — `definePrismaConfig` now imported from `prisma/config` (verified exported in `prisma@8.0.0-rc.27`), kept `contract: "./prisma/**/*.prisma"`, added `output: "./prisma"` so emit lands stable `prisma/contract.json` + `prisma/contract.d.ts`; `.env.local` dotenv loading kept with default no-override (runtime/deployment-provided vars win).
+  - Removed stale scaffold `prisma/db.ts` (imported an artifact emit never produced; nothing referenced it) and stale `prisma/schema.json`/`schema.d.ts`.
+  - `lib/prisma.ts` — `server-only`; loads `temporal-polyfill/full/global` first (Node v26.8.1 has no global `Temporal`; required peer of the ORM); exports typed `contract` (`contractFromJson<Contract>`) and `db` from `postgres({ contract, url })` (`@prisma/orm-postgres/runtime`); validates `DATABASE_URL` presence and `postgres:`/`postgresql:` protocol without echoing the URL (unsupported protocols stop with a clear error); one shared instance per process; `globalThis` caching is development-only so Next.js hot-reload never opens a second pool, while production relies on module caching; never closed per-request.
+  - Dependencies: added `temporal-polyfill` and `server-only` to `package.json` deps (both were already in `node_modules` as a peer/Next tooling dep). Prisma 7 deps (`@prisma/client`, `@prisma/adapter-pg`, `pg`) left in place — verified no application code imports them; removal wasn't part of the spec.
+  - Migration: read-only inspection first (`prisma db schema` — the configured Prisma Postgres `postgres` database was empty, a clean dev target). Then `prisma contract emit` (storageHash `ad13699f…e6e70b5`), `prisma migration plan --name init` (SQL preview reviewed: two tables, enum CHECK, composite PK, four authored indexes, cascade FK — 9 operations, additive), direct review of `migration.ts`, `ops.json`, and `migration.json`, `prisma db migrate --advance-ref db` (applied 1 migration / 9 operations, marker advanced, ref `db` set), and `prisma db verify` (marker + schema match contract). After correcting UUID generation to v7, re-emission changed only execution metadata; `migration plan --name verify_uuid_v7` reported `No changes detected`. Migration history preserved at `migrations/app/20261027T1852_init/` + `migrations/snapshots/` + `migrations/app/refs/db.json` (committed).
+  - `eslint.config.mjs` — globalIgnores for generated artifacts (`prisma/contract.d.ts`, `prisma/contract.json`, `migrations/**`) and package-synced skill dirs (`.agents/.claude/.cursor/.devin`); 8 lint errors were all in emitted contract types.
+  - Review deployment: new user systemd unit `foster-ai-development.service` — `next dev -H localhost -p 3005` from the development worktree (localhost bind required by the Clerk dev-handshake constraint, same as main). Main `foster-ai.service` on :3001 untouched and verified active. Review URL: `http://localhost:3005`.
+  - Test-quality gate: applied before verification. This feature adds no unit tests (no test suite exists in the repo and the spec's Verification section is the acceptance evidence). Evidence mapping: contract shape → programmatic `contract.json` inspection (models/enum/cascade/composite PK/indexes/timestamp codecs all confirmed); migration correctness → reviewed SQL preview + `db migrate` apply + `db verify` full mode; runtime/type safety → `tsc --noEmit`, `npm run lint`, `npm run build` all green; deployment → live route probes.
+
+- Implemented feature spec 06 backend project APIs without UI wiring (the original UUID-based baseline; the ID portions below are superseded by spec 07):
+  - `app/api/projects/route.ts` — authenticated owner-scoped list and create handlers; missing project names default to `Untitled Project`.
+  - `app/api/projects/[projectId]/route.ts` — UUID-validated owner-only rename and delete handlers with `404` missing-project and `403` non-owner responses.
+  - `proxy.ts` — `/api/projects(.*)` remains inside Clerk middleware but bypasses navigation redirects so handlers can return JSON `401` responses.
+  - No schema, dependency, UI, commit, push, or PR changes were made.
+
 ## In Progress
 
 - None.
 
 ## Next Up
 
-- Next feature spec after spec 04 lands on `main`.
+- Spec 08 (editor workspace shell at `/editor/[roomId]`) is next per the spec list.
 
-## Open Questions
+## Verification Evidence (spec 07)
 
-- None for this feature unit.
+- Test-quality gate applied before verification. Kept checks protect real user-facing failure modes: server-side owned/shared data, shared rows being display-only, stable slug-suffix preview, create navigation, rename prefill/refresh, and delete naming/removal. No unit-test suite was added because the repository has no test runner and these checks exercise the actual browser/API contract.
+- `npm run lint`, `npx tsc --noEmit`, `npm run build`, `npx prisma db verify`, and `git diff --check` all pass; fresh LSP diagnostics contain no errors or blockers.
+- Live signed-in Chromium smoke run against `http://localhost:3005`: **12/12 checks passed** — `/editor` server-rendered home, shared project appears only in Shared with no rename/delete controls, create preview is `slug-suffix`, suffix stays stable while typing, create navigates to `/editor/<roomId>`, created project appears after a server refresh, rename pre-fills and refreshes, and delete names/removes the project.
+- The active-workspace delete branch is source-verified only; `/editor/[roomId]` is spec 08 and does not exist yet, so the live test used a non-active project for refresh behavior.
+- The development service was restarted on `localhost:3005` after the slug-ID contract migration so it loaded the current `pg/text` contract; database and contract marker match at storage hash `b453671c…b819b29`.
+- Temporary Clerk sessions were revoked, temporary DB fixtures were deleted, and the dev database is empty after verification. No credentials were written to the repository.
+- CodeRabbit follow-up: POST and PATCH now trim project names and reject blank or over-200-character values at the server boundary; project-name boundary checks cover trimming, blank input, the 200-character limit, and 201-character rejection.
+- CodeRabbit follow-up: workflow wording distinguishes team conventions from GitHub enforcement, spec 05 marks its UUID ID model as superseded by spec 07, and the tracker reflects the committed PR workflow.
+- CodeRabbit follow-up: missing request-parser, ORM-helper, list-renderer, and database-factory JSDoc now documents their contracts and invariants; generated artifacts and obvious callbacks were not padded.
+- CodeRabbit follow-up: unused direct Prisma 7 dependencies were removed; Prisma 8 retains its nested `pg` runtime dependencies.
+- Follow-up verification: `npm run lint`, `npx tsc --noEmit`, `npm run build`, `npx prisma db verify`, `git diff --check`, and focused project-name boundary checks all pass. No credentials were written to the repository.
+- Unicode follow-up: `useProjectActions` decodes the URL pathname segment before comparing it with the raw project ID, so deleting an active workspace with a non-ASCII ID can still redirect correctly; malformed encoding fails closed. Focused URL-path checks, lint, TypeScript, and build pass.
+
+## Verification Evidence (spec 06)
+
+- Historical UUID-based API evidence; the project ID strategy is superseded by spec 07's slug-based text IDs.
+- `npm run lint`, `npx tsc --noEmit`, and `npm run build` all pass; the build includes dynamic routes `/api/projects` and `/api/projects/[projectId]` plus Proxy.
+- Live unauthenticated probes on `http://localhost:3005`: GET and POST `/api/projects`, plus PATCH with an invalid path, all return `401` JSON rather than Clerk redirects.
+- Temporary authenticated Clerk session smoke checks passed: owner-scoped GET, POST with `{}` → `Untitled Project`, UUID v7 generation, list inclusion, PATCH rename, DELETE, malformed JSON `400`, invalid UUID `400`, and non-owner PATCH/DELETE `403`.
+- Corrected delete verification confirmed the deleted project ID is absent from the subsequent owner list.
+- Temporary Clerk session was revoked and all smoke fixtures were deleted. `foster-ai-development.service` is active on localhost:3005. No credentials were written to the repository.
+
+## Verification Evidence (spec 05)
+
+- `prisma contract emit` clean; emitted contract programmatically verified: models `[Project, ProjectCollaborator]`, enum `ProjectStatus { DRAFT, ARCHIVED }` on `pg/text@1` with generated membership CHECK, `Project.id` `pg/uuid@1` with client-side UUID v7 generator (`uuidv7` from `uuid(7)`), `status` literal default `DRAFT`, `pg/timestamptz-date@1` timestamp codecs (JS `Date` interop), `Project.createdAt` on-create timestamp generator, `Project.updatedAt` on-create and on-update timestamp generators, `Project → ProjectCollaborator` 1:N relation with `onDelete: cascade` FK, composite PK `[projectId, email]`, indexes `Project(ownerId)`, `Project(createdAt)`, `PC(email)`, `PC(projectId, createdAt)` (+ implicit `PC(projectId)` FK index).
+- Migration: planned as `migrations/app/20261027T1852_init` (from baseline, storageHash `ad13699f9d266993f19c54b0fc41e70109887dcc89719623a44cd0a6ee6e70b5`); SQL preview reviewed before applying; `prisma db migrate --advance-ref db` applied 1 migration (9 operations) in one transaction; `prisma db verify` → "Database marker and schema match contract". No `generate`, `migrate dev`, `db push`, or reset was used.
+- `npm run lint` clean, `npx tsc --noEmit` clean, `npm run build` green (routes `ƒ /`, `○ /editor`, `ƒ /sign-in/…`, `ƒ /sign-up/…` + Proxy).
+- Live probes on the separate review server `http://localhost:3005` (foster-ai-development.service): `GET /` → 307 → `/sign-in?redirect_url=…3005…`, `GET /editor` → 307 (protected-first), `GET /sign-in` / `GET /sign-up` → 200. Main service on :3001 verified active and redirecting as before. (The first `GET /` right after service start returned 404 — first-compile transient; all subsequent requests correct.)
+- No credentials or connection strings appear in any committed file or log; `prisma`/runtime output masks them (`postgres://****:****@…`).
+- Recovery correction: commit `2a8f04d` included the local model's pre-existing Prisma setup changes in `package.json`, `package-lock.json`, `tsconfig.json`, `.gitignore`, and `.gitattributes`; those hunks were audited as required setup/dependency/ignore/generated-artifact changes or preserved pre-existing setup, not silently attributed to this correction. The correction commit changes only UUID v7 contract source/artifacts, development-only global caching, tracker evidence, and generated skill cleanup.
 
 ## Verification Evidence (spec 04)
 
@@ -95,10 +147,12 @@ Update this file whenever the current phase, active feature, or implementation s
 - This feature adds reusable UI primitives and styling infrastructure only; it does not change application data boundaries or storage.
 - The project sidebar uses `absolute` positioning so it floats over the editor canvas inside the workspace's relative container. `z-40` keeps it above the canvas and below dialog overlays (`z-50`).
 - Route protection is protected-first in `proxy.ts` (public routes are the code-owned auth paths from `lib/auth-routes.ts` only); pages and future Route Handlers/Server Actions still need their own `await auth()`/ownership checks per `architecture-context.md` invariants — the proxy protects navigation, not data access.
+- Spec 06 project API routes are a narrow exception to protected-first redirects: `/api/projects(.*)` remains under Clerk middleware but skips `auth.protect()` so each handler can return the required JSON `401`; authenticated list results are owner-scoped by `ownerId`, and mutations re-check ownership before filtering the write by both `id` and `ownerId`.
 - `/editor` currently renders only the navbar + projects sidebar around an empty canvas area; it exists so the spec 03 authenticated redirect has a valid target. Spec 04 (project dialogs) wires the sidebar's `New Project` button; the canvas itself lands later.
 
 ## Session Notes
 
+- Branch flow change (2026-10-27, Sarah's decision): all implementation commits land directly on `development`; `main` advances only via `development → main` PRs, created after local CodeRabbit review in VSC. Cleanup performed: `development` fast-forwarded to `main` (`97bae87` → `46742d7`); all ten stale `feature/*` / `fix/*` branches deleted locally (four were rebased before their merges — `feature/auth`, `feature/branding`, `feature/clerk-setup`, `fix/tailnet-clerk-origin` — and verified patch-equivalent in main via `git cherry` before `-D`); `origin/feature/auth-and-branding` deleted remotely. Only `main` and `development` remain. The permanent `development` worktree lives at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/development` (hardlinked `node_modules`, `.env.local` copied). Spec 04 merged to `main` before this convention existed — grandfathered, not retro-PR'd.
 - Clerk setup was done in the linked worktree `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/clerk-setup` on branch `feature/clerk-setup`, merged to `main`, and the worktree removed with `git wt remove --confirmed-integrated` (branch is ahead of `origin/main`, which has no remote in the local baseline repo).
 - The `NEXT_PUBLIC_CLERK_*` route URL env vars and development keys were written to `.env.local` in the worktree, then copied to the primary checkout; the file is gitignored in both.
 - Dev server hostname constraint (documented in `~/.config/systemd/user/foster-ai.service`): the persistent `foster-ai.service` must run `next dev -H localhost -p 3001`, **not** `-H 127.0.0.1`. Clerk's dev handshake rewrites the request to `http://localhost:3001`; with a `127.0.0.1` bind, Next sees a different origin and self-proxies that rewrite into itself, 500ing every route (`Failed to proxy https://localhost:3001/` + EPROTO in the journal). Both `http://localhost:3001` and the tailnet Caddy TLS proxy (`https://sarah-taylor.tail1644ec.ts.net:3001` → `127.0.0.1:3001`) render correctly under the `localhost` bind. Never `rm -rf .next` under the running service.
@@ -109,6 +163,9 @@ Update this file whenever the current phase, active feature, or implementation s
 - Feature spec 04 was implemented in the linked worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/project-dialogs` on branch `feature/project-dialogs`. Turbopack refuses a symlinked `node_modules` in a worktree ("Symlink … points out of the filesystem root") — use `cp -al <primary>/node_modules` (hardlinks) instead. A stale dev server from the primary checkout was occupying port 3002, so the verification server ran on 3005.
 - Signed-in live testing on the dev instance requires the 2026 Clerk cookie protocol (verified again for spec 04 on port 3005): the dev instance host is the decoded body of `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (base64 → `regular-swift-4842.clerk.accounts.dev`). The handshake `GET https://<dev-instance>/v1/client/handshake?domain=…&redirect_url=…` no longer sets a cookie — it returns an HTML redirect whose `?__clerk_handshake=<JWT>` payload carries the cookie directives; the real `__clerk_db_jwt` is the `dvb_…` value inside that payload. Cookies needed for the middleware to accept the session: `__session` (session JWT), `__client_uat` = that JWT's `iat` (seconds; `0` is rejected as missing), and `__clerk_db_jwt` = the `dvb_…` value. API gotchas this generation: `POST /v1/sessions` wants `user_id` form-encoded (query param → `form_param_missing`); `POST /v1/sessions/{id}/tokens` wants `Content-Type: application/json`; `/v1/users` is at `api.clerk.com`, not the dev-instance host (the instance host 404s it). Session tokens from the tokens endpoint expire after ~60s — mint and use in the same command. A plain `Authorization: Bearer` header or `ck` header is not accepted by the middleware in this generation.
 - The removed global layout header was the interim chrome from the initial Clerk setup; per spec 03 the user menu lives in the editor navbar.
+- Spec 05 review server: user systemd unit `foster-ai-development.service` (`~/.config/systemd/user/`), `next dev -H localhost -p 3005`, `WorkingDirectory` = the development worktree, enabled at boot. Host must be `localhost` (Clerk dev-handshake constraint, same as the main unit). Main service `foster-ai.service` (:3001) untouched. Stop/remove: `systemctl --user disable --now foster-ai-development.service`.
+- The `prisma orm init` template `User`/`Post` models that came with the pre-existing Prisma 8 scaffold were removed from `prisma/schema.prisma` (kept marker-only) — the spec requires exactly `Project`/`ProjectCollaborator`/`ProjectStatus`, and a local `User` model would contradict the no-local-Clerk-model rule. No database ever held those tables (the configured DB was empty before the init migration).
+- `prisma skills sync` drops `.agents/ .claude/ .cursor/ .devin/` + `skills-lock.json` (package-synced skill artifacts) and a root `prisma-8.md` welcome doc; these are gitignored and not committed. `.gitattributes` (pre-existing, from the Prisma 8 setup) marks emitted contract/migration artifacts `linguist-generated` and is committed with the feature.
 - The original checkout had an empty `.git` directory, so a local baseline repository was initialized before implementation. The completed design-system commit was merged into `main`, and the temporary linked worktree was removed after verification.
 - Generated `components/ui/*` files were created by the shadcn CLI and left unmodified afterward.
 - CSS LSP warnings for Tailwind v4 directives were marked false positives. A generated `scroll-area.tsx` unused-import hint was deferred without changing the generated file.
