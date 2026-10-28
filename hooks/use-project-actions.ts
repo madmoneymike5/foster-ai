@@ -69,8 +69,15 @@ export function useProjectActions(): UseProjectActions {
 
   // The room segment of /editor/[roomId]; null on the /editor home page.
   const currentRoomId = useMemo(() => {
-    const segment = pathname.split("/")[2] ?? "";
-    return segment || null;
+    const [, , segment = ""] = pathname.split("/");
+    if (!segment) return null;
+
+    try {
+      return decodeURIComponent(segment);
+    } catch {
+      // A malformed URL should never match a real project ID.
+      return null;
+    }
   }, [pathname]);
 
   const openCreate = () => {

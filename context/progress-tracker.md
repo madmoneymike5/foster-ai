@@ -99,6 +99,7 @@ Update this file whenever the current phase, active feature, or implementation s
 - CodeRabbit follow-up: missing request-parser, ORM-helper, list-renderer, and database-factory JSDoc now documents their contracts and invariants; generated artifacts and obvious callbacks were not padded.
 - CodeRabbit follow-up: unused direct Prisma 7 dependencies were removed; Prisma 8 retains its nested `pg` runtime dependencies.
 - Follow-up verification: `npm run lint`, `npx tsc --noEmit`, `npm run build`, `npx prisma db verify`, `git diff --check`, and focused project-name boundary checks all pass. No credentials were written to the repository.
+- Unicode follow-up: `useProjectActions` decodes the URL pathname segment before comparing it with the raw project ID, so deleting an active workspace with a non-ASCII ID can still redirect correctly; malformed encoding fails closed. Focused URL-path checks, lint, TypeScript, and build pass.
 
 ## Verification Evidence (spec 06)
 
