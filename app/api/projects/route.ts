@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 
 import { db } from "@/lib/prisma";
+import { normalizeProjectName } from "@/lib/project-name";
 import { generateProjectId, isProjectId } from "@/lib/slug";
 
 type ProjectRequestBody = {
@@ -8,6 +9,9 @@ type ProjectRequestBody = {
   id?: string;
 };
 
+/**
+ * Narrow parsed JSON to the object shape accepted by the project API.
+ */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -22,6 +26,13 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
+/**
+ * Parse the optional project name and client-generated ID from a request body.
+ * Names are normalized here so every POST path stores the same trimmed value.
+ *
+ * @param request - Incoming project-create request.
+ * @returns Parsed fields, or `null` when the JSON shape or name is invalid.
+ */
 async function readProjectBody(request: Request): Promise<ProjectRequestBody | null> {
   const text = await request.text();
   if (!text.trim()) return {};
@@ -36,8 +47,12 @@ async function readProjectBody(request: Request): Promise<ProjectRequestBody | n
   if (!isRecord(body)) return null;
   if ("name" in body && typeof body.name !== "string") return null;
   if ("id" in body && typeof body.id !== "string") return null;
+
+  const name = "name" in body ? normalizeProjectName(body.name as string) : undefined;
+  if ("name" in body && name === null) return null;
+
   return {
-    name: "name" in body ? (body.name as string) : undefined,
+    name: name ?? undefined,
     id: "id" in body ? (body.id as string) : undefined,
   };
 }
@@ -69,7 +84,10 @@ export async function POST(request: Request) {
 
   const body = await readProjectBody(request);
   if (!body) {
-    return Response.json({ error: "Request body must contain string name and id fields" }, { status: 400 });
+    return Response.json(
+      { error: "Request body is invalid; provided project names must be 1-200 characters after trimming" },
+      { status: 400 },
+    );
   }
   if (body.id !== undefined && !isProjectId(body.id)) {
     return Response.json({ error: "Invalid project ID" }, { status: 400 });

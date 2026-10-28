@@ -79,6 +79,10 @@ interface ProjectListProps {
   onDelete?: (project: ProjectListItem) => void;
 }
 
+/**
+ * Render a project collection with optional owner-only row actions.
+ * Shared-project callers omit both callbacks so collaborator rows remain read-only.
+ */
 function ProjectList({ projects, onRename, onDelete }: ProjectListProps) {
   return (
     <ul className="flex flex-col gap-0.5">

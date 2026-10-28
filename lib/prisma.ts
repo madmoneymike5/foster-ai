@@ -32,6 +32,11 @@ function resolveDatabaseUrl(): string {
   return url;
 }
 
+/**
+ * Create the process-scoped Prisma 8 PostgreSQL binding.
+ *
+ * @returns A typed database client configured with the emitted contract.
+ */
 function createDb() {
   return postgres({
     contract,

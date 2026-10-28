@@ -2,11 +2,11 @@
 
 ## Branch and Merge Flow
 
-- All implementation commits land directly on `development`. No feature branches for routine work.
+- Team convention: routine implementation commits land directly on `development`; no feature branches are used for routine work.
 - `main` is integration-only: it advances solely via `development → main` pull requests. No one commits or pushes to `main` directly.
 - Also enforced locally by a `pre-commit` / `pre-merge-commit` guard in the primary checkout's `.git/hooks/` (symlinked into the development worktree's gitdir hooks dir; the global tokensave hooks chain to it). It refuses commits while on `main`; emergency override: `ALLOW_MAIN_COMMIT=1 git commit ...`.
-- Enforced by the GitHub ruleset **"Protect main"** (ruleset id 25978006, `~DEFAULT_BRANCH`): `pull_request` rule with `required_approving_review_count: 0` (PR required, no approval needed — solo dev, local CodeRabbit is the review gate; required count 1 would deadlock since GitHub forbids author self-approval), `non_fast_forward` (no force pushes), `deletion` (branch cannot be deleted). Verified 2026-10-27: direct push rejected, scratch PR merged-CLEAN with zero approvals. Note: this repo's 2026-generation ruleset API needs `conditions.ref_name.include/exclude` (`target_id` is ignored — an empty condition set matches nothing) and `required_review_thread_resolution` is a required param.
-- Sarah runs CodeRabbit locally in VSC on `development` and fixes findings there before creating the PR.
+- Enforced by the GitHub ruleset **"Protect main"** (ruleset id 25978006, `~DEFAULT_BRANCH`): `pull_request` rule with `required_approving_review_count: 0` (a PR is required, but no approval is needed for this solo workflow), `non_fast_forward` (no force pushes), and `deletion` (branch cannot be deleted). The ruleset requires a PR into `main` but does not technically enforce `development` as the source branch; that source-branch choice is the team convention. Local CodeRabbit review is the manual review gate; required approvals remain zero because GitHub forbids author self-approval. Verified 2026-10-27: direct push rejected, scratch PR merged-CLEAN with zero approvals. Note: this repo's 2026-generation ruleset API needs `conditions.ref_name.include/exclude` (`target_id` is ignored — an empty condition set matches nothing) and `required_review_thread_resolution` is a required param.
+- Sarah runs CodeRabbit locally in VSC on `development` and fixes findings there before creating the PR; this is a manual process gate, not a GitHub status check.
 - The day-to-day workspace for `development` is the permanent linked worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/development`. The primary checkout stays on `main` for inspection, fetch, and branch administration only.
 - Ordinary pushes only. If history ever needs rewriting, use `--force-with-lease` — never bare `--force`.
 

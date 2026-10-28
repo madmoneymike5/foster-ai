@@ -1,5 +1,7 @@
 # Prisma 8 — Data Models and Database Layer
 
+> **Superseded ID strategy:** This document records the original UUID-based Prisma baseline. Spec 07 intentionally superseded the `Project.id` and `ProjectCollaborator.projectId` UUID requirements with slug-based text IDs so the database ID, `/editor/[roomId]` segment, and Liveblocks room ID remain aligned. Keep the UUID details below as historical implementation context; new work must follow spec 07 and the current progress tracker.
+
 ## Goal
 
 Prisma ORM 8 is already initialized in this existing Next.js project. Implement the project data models, a cached PostgreSQL database singleton, and the first migration using **Prisma ORM 8's current APIs and conventions**.

@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 
 import { db } from "@/lib/prisma";
+import { normalizeProjectName } from "@/lib/project-name";
 import { isProjectId } from "@/lib/slug";
 
 type ProjectRequestBody = {
@@ -11,10 +12,19 @@ type ProjectRouteContext = {
   params: Promise<{ projectId: string }>;
 };
 
+/**
+ * Narrow parsed JSON to the object shape accepted by the project API.
+ */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Parse and normalize the rename request body before ownership checks run.
+ *
+ * @param request - Incoming project-rename request.
+ * @returns The trimmed name, an empty object for a missing field, or `null` for invalid input.
+ */
 async function readProjectBody(request: Request): Promise<ProjectRequestBody | null> {
   const text = await request.text();
   if (!text.trim()) return {};
@@ -28,9 +38,18 @@ async function readProjectBody(request: Request): Promise<ProjectRequestBody | n
 
   if (!isRecord(body)) return null;
   if (!("name" in body)) return {};
-  return typeof body.name === "string" ? { name: body.name } : null;
+  if (typeof body.name !== "string") return null;
+
+  const name = normalizeProjectName(body.name);
+  return name === null ? null : { name };
 }
 
+/**
+ * Resolve and validate the dynamic project ID before querying the database.
+ *
+ * @param context - Next.js route context containing the promised path params.
+ * @returns A valid project ID, or `null` for malformed path input.
+ */
 async function getProjectId(context: ProjectRouteContext): Promise<string | null> {
   const { projectId } = await context.params;
   return isProjectId(projectId) ? projectId : null;
@@ -52,7 +71,10 @@ export async function PATCH(request: Request, context: ProjectRouteContext) {
 
   const body = await readProjectBody(request);
   if (!body || !("name" in body) || typeof body.name !== "string") {
-    return Response.json({ error: "Request body must contain a string name" }, { status: 400 });
+    return Response.json(
+      { error: "Request body must contain a project name of 1-200 characters after trimming" },
+      { status: 400 },
+    );
   }
 
   const project = await db.orm.public.Project.first({ id: projectId });

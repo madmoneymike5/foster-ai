@@ -4,7 +4,7 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Phase 7: spec 07 — wire editor home to the real project API — complete on `development` (uncommitted)
+- Phase 7: spec 07 — wire editor home to the real project API — complete on `development` and under review in PR #4
 - Process change (Oct 27): all future implementation work lands on `development`; `main` advances only via `development → main` PRs. See the Branch and Merge Flow section in `ai-workflow-rules.md`.
 
 ## Current Goal
@@ -13,7 +13,7 @@ Update this file whenever the current phase, active feature, or implementation s
 - ID-design decision (Sarah, 2026-10-28): project IDs are slug-based, not UUIDs — `Project.id` is a `String` slug-suffix value (e.g. `pricing-page-a1b2`) that is simultaneously the project ID, the `/editor/[roomId]` URL segment, and the Liveblocks room ID (specs 07/08/10 stay aligned). The migration `migrations/app/20261027T2058_slug_based_project_ids` changed `Project.id` and `ProjectCollaborator.projectId` from UUID to text; `POST /api/projects` accepts the client-generated `id`. This supersedes the UUID v7 ID strategy from specs 05/06; those UUID references below are historical baseline evidence only.
 - Generated project IDs truncate long slugs to keep the complete slug-suffix value within the validator's 100-character limit.
 - Project create, rename, and delete dialogs show mutation failure messages; create conflicts refresh the preview suffix so the user can retry with a new ID.
-- Sarah will review and commit later; this agent must not commit, push, or PR to `development` or `main`.
+- PR #4 includes the follow-up validation, documentation, dependency, and JSDoc fixes requested by CodeRabbit; the branch is ready for review.
 
 ## Completed
 
@@ -84,8 +84,7 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Next Up
 
-- Sarah reviews the uncommitted spec 07 diff and commits when ready; this agent must not commit.
-- Spec 08 (editor workspace shell at `/editor/[roomId]`) next per the spec list.
+- Spec 08 (editor workspace shell at `/editor/[roomId]`) is next per the spec list.
 
 ## Verification Evidence (spec 07)
 
@@ -95,6 +94,11 @@ Update this file whenever the current phase, active feature, or implementation s
 - The active-workspace delete branch is source-verified only; `/editor/[roomId]` is spec 08 and does not exist yet, so the live test used a non-active project for refresh behavior.
 - The development service was restarted on `localhost:3005` after the slug-ID contract migration so it loaded the current `pg/text` contract; database and contract marker match at storage hash `b453671c…b819b29`.
 - Temporary Clerk sessions were revoked, temporary DB fixtures were deleted, and the dev database is empty after verification. No credentials were written to the repository.
+- CodeRabbit follow-up: POST and PATCH now trim project names and reject blank or over-200-character values at the server boundary; project-name boundary checks cover trimming, blank input, the 200-character limit, and 201-character rejection.
+- CodeRabbit follow-up: workflow wording distinguishes team conventions from GitHub enforcement, spec 05 marks its UUID ID model as superseded by spec 07, and the tracker reflects the committed PR workflow.
+- CodeRabbit follow-up: missing request-parser, ORM-helper, list-renderer, and database-factory JSDoc now documents their contracts and invariants; generated artifacts and obvious callbacks were not padded.
+- CodeRabbit follow-up: unused direct Prisma 7 dependencies were removed; Prisma 8 retains its nested `pg` runtime dependencies.
+- Follow-up verification: `npm run lint`, `npx tsc --noEmit`, `npm run build`, `npx prisma db verify`, `git diff --check`, and focused project-name boundary checks all pass. No credentials were written to the repository.
 
 ## Verification Evidence (spec 06)
 
