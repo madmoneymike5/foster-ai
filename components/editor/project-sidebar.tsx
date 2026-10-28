@@ -16,20 +16,26 @@ interface ProjectSidebarProps {
   onNewProject?: () => void;
   onRenameProject?: (project: ProjectListItem) => void;
   onDeleteProject?: (project: ProjectListItem) => void;
+  /** ID of the open workspace; its row is highlighted. */
+  currentProjectId?: string;
+  /** Tab shown when the sidebar opens (defaults to "my-projects"). */
+  defaultTab?: "my-projects" | "shared";
 }
 
 interface ProjectItemProps {
   project: ProjectListItem;
   onRename?: (project: ProjectListItem) => void;
   onDelete?: (project: ProjectListItem) => void;
+  isActive?: boolean;
 }
 
 /**
  * One row in the project list. Clicking the name opens the project's workspace
  * at /editor/[roomId]. Rename and delete actions render only for owned
- * projects — shared/collaborator rows are display-only.
+ * projects — shared/collaborator rows are display-only. The row of the open
+ * workspace is highlighted and marked `aria-current="page"`.
  */
-function ProjectItem({ project, onRename, onDelete }: ProjectItemProps) {
+function ProjectItem({ project, onRename, onDelete, isActive }: ProjectItemProps) {
   const router = useRouter();
   const showActions = !project.isShared && Boolean(onRename || onDelete);
 
@@ -37,8 +43,14 @@ function ProjectItem({ project, onRename, onDelete }: ProjectItemProps) {
     <li className="flex items-center gap-1">
       <Button
         variant="ghost"
-        className="h-auto flex-1 truncate justify-start px-1 py-1.5 text-sm text-copy-secondary hover:text-copy-primary"
+        className={cn(
+          "h-auto flex-1 truncate justify-start px-1 py-1.5 text-sm",
+          isActive
+            ? "bg-accent-dim text-copy-primary hover:text-copy-primary"
+            : "text-copy-secondary hover:text-copy-primary"
+        )}
         title={project.name}
+        aria-current={isActive ? "page" : undefined}
         onClick={() => router.push(`/editor/${project.id}`)}
       >
         <span className="truncate">{project.name}</span>
@@ -77,13 +89,14 @@ interface ProjectListProps {
   projects: ProjectListItem[];
   onRename?: (project: ProjectListItem) => void;
   onDelete?: (project: ProjectListItem) => void;
+  currentProjectId?: string;
 }
 
 /**
  * Render a project collection with optional owner-only row actions.
  * Shared-project callers omit both callbacks so collaborator rows remain read-only.
  */
-function ProjectList({ projects, onRename, onDelete }: ProjectListProps) {
+function ProjectList({ projects, onRename, onDelete, currentProjectId }: ProjectListProps) {
   return (
     <ul className="flex flex-col gap-0.5">
       {projects.map((project) => (
@@ -92,6 +105,7 @@ function ProjectList({ projects, onRename, onDelete }: ProjectListProps) {
           project={project}
           onRename={onRename}
           onDelete={onDelete}
+          isActive={currentProjectId !== undefined && project.id === currentProjectId}
         />
       ))}
     </ul>
@@ -100,8 +114,9 @@ function ProjectList({ projects, onRename, onDelete }: ProjectListProps) {
 
 /**
  * The slide-in projects sidebar: server-fetched owned and shared project lists,
- * per-row rename/delete actions for owned projects, and a mobile backdrop scrim
- * that closes the sidebar when tapped.
+ * per-row rename/delete actions for owned projects, a mobile backdrop scrim
+ * that closes the sidebar when tapped, and an accent highlight on the row of
+ * the open workspace (`currentProjectId`).
  */
 export function ProjectSidebar({
   isOpen,
@@ -111,6 +126,8 @@ export function ProjectSidebar({
   onNewProject,
   onRenameProject,
   onDeleteProject,
+  currentProjectId,
+  defaultTab = "my-projects",
 }: ProjectSidebarProps) {
   return (
     <>
@@ -144,7 +161,7 @@ export function ProjectSidebar({
             </Button>
           </div>
 
-          <Tabs defaultValue="my-projects" className="flex flex-1 gap-4 overflow-y-auto p-4">
+          <Tabs defaultValue={defaultTab} className="flex flex-1 gap-4 overflow-y-auto p-4">
             <TabsList className="w-full">
               <TabsTrigger value="my-projects">My Projects</TabsTrigger>
               <TabsTrigger value="shared">Shared</TabsTrigger>
@@ -154,10 +171,14 @@ export function ProjectSidebar({
                 projects={ownedProjects}
                 onRename={onRenameProject}
                 onDelete={onDeleteProject}
+                currentProjectId={currentProjectId}
               />
             </TabsContent>
             <TabsContent value="shared" className="min-h-0 flex-1">
-              <ProjectList projects={sharedProjects} />
+              <ProjectList
+                projects={sharedProjects}
+                currentProjectId={currentProjectId}
+              />
             </TabsContent>
           </Tabs>
 
