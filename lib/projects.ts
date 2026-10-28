@@ -28,17 +28,27 @@ export async function getOwnedProjects(userId: string): Promise<ProjectListItem[
 }
 
 /**
- * Lists projects shared to the user's email address as a collaborator.
- * Projects the user also owns are excluded so they appear once, in the owned
- * list. Shared rows are ordered by when the collaboration was added, newest
- * first (the collaborator row carries the grant timestamp; the project's own
- * createdAt is unrelated to the share).
+ * Lists projects shared to any of the user's verified email addresses as a
+ * collaborator. Projects the user also owns are excluded so they appear once,
+ * in the owned list. Shared rows are ordered by when the collaboration was
+ * added, newest first (the collaborator row carries the grant timestamp; the
+ * project's own createdAt is unrelated to the share).
  *
- * @param email - The user's primary email address (collaborators are matched by email).
+ * @param emails - Normalized email addresses that may identify the user.
  * @param excludeProjectIds - Project IDs to omit (the user's own projects).
  */
-export async function getSharedProjects(email: string, excludeProjectIds: string[] = []): Promise<ProjectListItem[]> {
-  const collaborations = await db.orm.public.ProjectCollaborator.where((w) => w.email.eq(email))
+export async function getSharedProjects(
+  emails: string[],
+  excludeProjectIds: string[] = [],
+): Promise<ProjectListItem[]> {
+  const accessEmails = [...new Set(emails.map((email) => email.trim().toLowerCase()))].filter(
+    (email) => email.length > 0,
+  );
+  if (accessEmails.length === 0) return [];
+
+  const collaborations = await db.orm.public.ProjectCollaborator.where((w) =>
+    w.email.in(accessEmails),
+  )
     .orderBy((o) => o.createdAt.desc())
     .all();
 
