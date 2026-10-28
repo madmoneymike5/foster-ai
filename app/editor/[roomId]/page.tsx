@@ -28,9 +28,10 @@ export default async function WorkspacePage(props: PageProps<"/editor/[roomId]">
   }
 
   const ownedProjects = await getOwnedProjects(identity.userId);
-  const sharedProjects = identity.primaryEmail
-    ? await getSharedProjects(identity.primaryEmail, ownedProjects.map((project) => project.id))
-    : [];
+  const sharedProjects = await getSharedProjects(
+    identity.accessEmails,
+    ownedProjects.map((project) => project.id),
+  );
 
   // The authorized project drives the navbar name and the sidebar highlight.
   // isShared mirrors ownership so a collaborator's row lands in the Shared

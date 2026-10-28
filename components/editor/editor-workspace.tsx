@@ -7,6 +7,7 @@ import { EditorNavbar } from "@/components/editor/editor-navbar";
 import { EditorHome } from "@/components/editor/editor-home";
 import { ProjectDialogs } from "@/components/editor/project-dialogs";
 import { ProjectSidebar } from "@/components/editor/project-sidebar";
+import { ShareDialog } from "@/components/editor/share-dialog";
 import { useProjectActions } from "@/hooks/use-project-actions";
 import type { ProjectListItem } from "@/lib/projects";
 
@@ -40,6 +41,10 @@ export function EditorWorkspace({
   // The AI sidebar only exists in a workspace; it opens by default there so
   // the placeholder is visible on first load.
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(Boolean(activeProject));
+  // The share dialog only exists for an active workspace; ownership is
+  // derived from the server-decided isShared flag (a shared row means the
+  // caller is a collaborator, not the owner).
+  const [isShareOpen, setIsShareOpen] = useState(false);
   const actions = useProjectActions();
 
   return (
@@ -52,6 +57,7 @@ export function EditorWorkspace({
         onToggleAiSidebar={
           activeProject ? () => setIsAiSidebarOpen((open) => !open) : undefined
         }
+        onShareProject={activeProject ? () => setIsShareOpen(true) : undefined}
       />
       <div className="relative flex min-h-0 flex-1">
         <ProjectSidebar
@@ -81,6 +87,15 @@ export function EditorWorkspace({
           />
         )}
       </div>
+      {activeProject && (
+        <ShareDialog
+          key={activeProject.id}
+          projectId={activeProject.id}
+          isOwner={!activeProject.isShared}
+          open={isShareOpen}
+          onOpenChange={setIsShareOpen}
+        />
+      )}
       <ProjectDialogs actions={actions} />
     </div>
   );

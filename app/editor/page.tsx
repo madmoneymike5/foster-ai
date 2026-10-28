@@ -23,11 +23,12 @@ export default async function EditorPage() {
 
   const ownedProjects = await getOwnedProjects(identity.userId);
 
-  // Collaborators are matched by the user's primary email. Projects the user
-  // owns are excluded so they appear once, under My Projects.
-  const sharedProjects = identity.primaryEmail
-    ? await getSharedProjects(identity.primaryEmail, ownedProjects.map((project) => project.id))
-    : [];
+  // Collaborators are matched by any verified email on the Clerk account.
+  // Projects the user owns are excluded so they appear once, under My Projects.
+  const sharedProjects = await getSharedProjects(
+    identity.accessEmails,
+    ownedProjects.map((project) => project.id),
+  );
 
   return <EditorWorkspace ownedProjects={ownedProjects} sharedProjects={sharedProjects} />;
 }

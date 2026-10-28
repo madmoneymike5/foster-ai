@@ -4,13 +4,15 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Phase 8: spec 08 — `/editor/[roomId]` editor workspace shell with server-side access checks — implemented and verified on `development` (uncommitted per Sarah's instruction; spec 09 next)
+- Phase 9: spec 09 — share dialog (collaborator invite/remove/list + Clerk name/avatar enrichment) — implemented and verified on `development` (uncommitted per Sarah's instruction)
+- Phase 8: spec 08 — `/editor/[roomId]` editor workspace shell with server-side access checks — implemented and verified on `development` (uncommitted per Sarah's instruction)
 - Phase 7: spec 07 — wire editor home to the real project API — complete on `development` and under review in PR #4
 - Process change (Oct 27): all future implementation work lands on `development`; `main` advances only via `development → main` PRs. See the Branch and Merge Flow section in `ai-workflow-rules.md`.
 
 ## Current Goal
 
-- Spec 08 is implemented and verified (see the Completed entry and the Verification Evidence below). Next feature unit: spec 09 (share dialog) per the spec list.
+- Spec 09 (share dialog) is implemented and verified. Owners invite/remove collaborators and copy the project link; collaborators see a read-only collaborator list. Collaborator emails are enriched with a display name + avatar via the Clerk Backend API, falling back to email-only when no Clerk user matches. Access accepts the primary email and verified secondary Clerk emails while storing the invited address.
+- Spec 08 is implemented and verified (see the Completed entry and the Verification Evidence below).
 - Spec 07 is implemented and verified: server-fetched project lists into the sidebar, `useProjectActions` with real create/rename/delete against the project APIs, and dialog wiring (room ID preview, pre-filled rename, named delete).
 - ID-design decision (Sarah, 2026-10-28): project IDs are slug-based, not UUIDs — `Project.id` is a `String` slug-suffix value (e.g. `pricing-page-a1b2`) that is simultaneously the project ID, the `/editor/[roomId]` URL segment, and the Liveblocks room ID (specs 07/08/10 stay aligned). The migration `migrations/app/20261027T2058_slug_based_project_ids` changed `Project.id` and `ProjectCollaborator.projectId` from UUID to text; `POST /api/projects` accepts the client-generated `id`. This supersedes the UUID v7 ID strategy from specs 05/06; those UUID references below are historical baseline evidence only.
 - Generated project IDs truncate long slugs to keep the complete slug-suffix value within the validator's 100-character limit.
@@ -79,8 +81,16 @@ Update this file whenever the current phase, active feature, or implementation s
   - `app/api/projects/[projectId]/route.ts` — UUID-validated owner-only rename and delete handlers with `404` missing-project and `403` non-owner responses.
   - `proxy.ts` — `/api/projects(.*)` remains inside Clerk middleware but bypasses navigation redirects so handlers can return JSON `401` responses.
   - No schema, dependency, UI, commit, push, or PR changes were made.
+- Implemented feature spec 09 (share dialog) on `development` (uncommitted per Sarah's instruction):
+  - `app/api/projects/[projectId]/collaborators/route.ts` — authenticated collaborator list for owners/collaborators, owner-only invite/remove, normalized email validation, duplicate-invite `409`, and uniform project-access `404` behavior.
+  - `lib/collaborators.ts` — server-only Clerk enrichment with display-name/avatar fallback, independent batches of at most 100 email lookups, and email normalization.
+  - `components/editor/share-dialog.tsx` — owner management controls (project link copy with temporary `Copied!`, invite, remove) and collaborator read-only list with Clerk avatars or initials fallback.
+  - `components/editor/editor-navbar.tsx` and `components/editor/editor-workspace.tsx` — active-workspace Share button, controlled dialog state, and owner/collaborator mode wiring.
+  - `lib/project-access.ts`, `lib/projects.ts`, and editor pages — primary plus verified secondary email access matching; collaborator rows remain keyed by the invited normalized address.
+  - No `components/ui/*` files modified; no local user table added.
+
 - Implemented feature spec 08 (`/editor/[roomId]` editor workspace shell) on `development` (uncommitted per Sarah's instruction):
-  - `lib/project-access.ts` — `getCurrentProjectIdentity()` (null when unauthenticated) and `checkProjectAccess(projectId, identity)`: validates the roomId with `isProjectId` first (malformed → null, matching the API route boundary pattern), loads the project by id, and grants access when `ownerId` matches or a `ProjectCollaborator` row matches the identity's primary email. Intentionally returns null for both missing and unauthorized projects so the response never leaks existence.
+  - `lib/project-access.ts` — `getCurrentProjectIdentity()` (null when unauthenticated) and `checkProjectAccess(projectId, identity)`: validates the roomId with `isProjectId` first (malformed → null, matching the API route boundary pattern), loads the project by id, and grants access when `ownerId` matches or a `ProjectCollaborator` row matches any verified email on the identity. Intentionally returns null for both missing and unauthorized projects so the response never leaks existence.
   - `app/editor/[roomId]/page.tsx` — server component: redirects to sign-in when unauthenticated, renders `AccessDenied` for missing/unauthorized/malformed rooms, otherwise fetches the owned + shared project lists (reusing the spec 07 queries) and renders the workspace shell with the room's `activeProject`.
   - `components/editor/access-denied.tsx` — centered `AccessDenied` state (LockKeyhole) with a `Back to projects` link to `/editor`.
   - `components/editor/editor-workspace.tsx` — full-viewport layout (`h-dvh`, `min-h-0`, `overflow-hidden`); accepts an optional `activeProject` — when present the AI sidebar opens by default and the center shows the canvas placeholder instead of `EditorHome`.
@@ -92,11 +102,20 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## In Progress
 
-- None — spec 08 is complete and verified; nothing is in flight.
+- None — spec 09 is complete and verified; no feature work is in flight.
 
 ## Next Up
 
-- Spec 09 (share dialog) is next per the spec list. Implementation will build on the access helpers in `lib/project-access.ts` and the (currently disabled) Share2 button in the editor navbar.
+- Spec 10 (Liveblocks setup) per the spec list, once spec 09 is implemented and verified.
+
+## Verification Evidence (spec 09)
+
+- Test-quality gate applied before verification. Kept checks protect the owner workflow, Clerk enrichment and email-only fallback, collaborator read-only behavior, server-side owner enforcement, authentication boundaries, secondary-email access, and cleanup. No unit-test suite was added because the repository has no test runner; these checks exercise the actual browser/API contract.
+- `npm run lint`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` pass. The build registers `/api/projects/[projectId]/collaborators`; LSP reports no errors, only existing auxiliary ast-grep hints for boundary narrowing and an extensionless import convention.
+- Focused localhost:3005 owner/collaborator smoke: **17/17 checks passed** — owner create and dialog, Clerk name/avatar enrichment, unknown-email fallback, link copy and temporary `Copied!`, invite/remove refresh, duplicate `409`, collaborator read-only UI, collaborator `GET 200`/`POST 403`/`DELETE 403`, unauthenticated `401`, database state, and fixture deletion.
+- Secondary-email regression: **6/6 functional checks passed** — a verified secondary Clerk address was invited, the user signed in through the primary address, the workspace opened, the project appeared under the **Shared** tab, the collaborator API listed the invitation, and mutations remained `403`. The owner ticket expired before the final API delete after the extra navigation; the fixture was manually removed from the database and all Clerk artifacts were deleted, then zero counts were verified.
+- CodeRabbit review covered all tracked and untracked feature files. The valid state-reset and Clerk batching findings were fixed; duplicate `409` behavior was confirmed live. The remaining generic query/filter and historical mixed-case suggestions were reviewed and deferred because the Prisma 8 builder lacks predicate conjunction and all application writes normalize collaborator emails; the current database has no historical spec09 rows.
+- Cleanup verified: `0` spec09 `Project` rows, `0` `ProjectCollaborator` rows, `0` temporary Clerk users, and `0` throwaway organizations. No credentials or session values were written to the repository.
 
 ## Verification Evidence (spec 08)
 

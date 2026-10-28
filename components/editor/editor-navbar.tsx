@@ -19,6 +19,8 @@ interface EditorNavbarProps {
   isAiSidebarOpen?: boolean;
   /** Present only for an active workspace; drives the AI sidebar toggle. */
   onToggleAiSidebar?: () => void;
+  /** Present only for an active workspace; opens the share dialog. */
+  onShareProject?: () => void;
 }
 
 /**
@@ -32,6 +34,7 @@ interface EditorNavbarProps {
  * @param projectName - Active project name shown centered; `undefined` on the home.
  * @param isAiSidebarOpen - Whether the AI sidebar is open (workspaces only).
  * @param onToggleAiSidebar - Called when the AI sidebar toggle is clicked.
+ * @param onShareProject - Called when the share button is clicked (workspaces only).
  */
 export function EditorNavbar({
   isSidebarOpen,
@@ -39,6 +42,7 @@ export function EditorNavbar({
   projectName,
   isAiSidebarOpen,
   onToggleAiSidebar,
+  onShareProject,
 }: EditorNavbarProps) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-surface-border bg-surface px-3">
@@ -67,15 +71,12 @@ export function EditorNavbar({
         )}
       </div>
       <div className="flex items-center gap-1">
-        {projectName && (
-          // Sharing itself lands in spec 09; the button is chrome for now, so
-          // it is visibly disabled with an explanation rather than a no-op.
+        {projectName && onShareProject && (
           <Button
             variant="ghost"
             size="icon"
             aria-label="Share project"
-            title="Sharing is not available yet"
-            disabled
+            onClick={onShareProject}
           >
             <Share2 className="h-5 w-5" />
           </Button>

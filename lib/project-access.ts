@@ -7,12 +7,12 @@ import { isProjectId } from "./slug";
 
 /**
  * The caller's identity as a project access check needs it: the Clerk user
- * ID (ownership is keyed on this) and the primary email address
- * (collaborator rows are keyed on this).
+ * ID (ownership is keyed on this) and every verified email address that may
+ * identify the caller in collaborator rows.
  */
 export interface ProjectIdentity {
   userId: string;
-  primaryEmail: string | null;
+  accessEmails: string[];
 }
 
 /**
@@ -31,15 +31,22 @@ export interface ProjectAccess {
 export async function getCurrentProjectIdentity(): Promise<ProjectIdentity | null> {
   const user = await currentUser();
   if (!user) return null;
-  return {
-    userId: user.id,
-    primaryEmail: user.primaryEmailAddress?.emailAddress ?? null,
-  };
+
+  const emails = new Set<string>();
+  const primaryEmail = user.primaryEmailAddress?.emailAddress.trim().toLowerCase();
+  if (primaryEmail) emails.add(primaryEmail);
+
+  for (const email of user.emailAddresses) {
+    const normalized = email.emailAddress.trim().toLowerCase();
+    if (normalized && email.verification?.status === "verified") emails.add(normalized);
+  }
+
+  return { userId: user.id, accessEmails: [...emails] };
 }
 
 /**
  * Checks whether the identity may access the project: the owner, or a
- * collaborator row matching the identity's primary email.
+ * collaborator row matching any of the identity's verified email addresses.
  *
  * A missing project and an unauthorized project both return `null` on
  * purpose — callers cannot distinguish them, so nonexistent project IDs are
@@ -65,12 +72,11 @@ export async function checkProjectAccess(
     return { project: { id: project.id, name: project.name }, isOwner: true };
   }
 
-  if (identity.primaryEmail) {
-    const collaboration = await db.orm.public.ProjectCollaborator.first({
-      projectId: project.id,
-      email: identity.primaryEmail,
-    });
-    if (collaboration) {
+  if (identity.accessEmails.length > 0) {
+    const collaborations = await db.orm.public.ProjectCollaborator.where((w) =>
+      w.projectId.eq(project.id),
+    ).all();
+    if (collaborations.some((collaboration) => identity.accessEmails.includes(collaboration.email))) {
       return { project: { id: project.id, name: project.name }, isOwner: false };
     }
   }
