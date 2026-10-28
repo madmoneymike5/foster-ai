@@ -99,6 +99,8 @@ async function lookupClerkUsers(emails: string[]): Promise<Map<string, ClerkUser
       });
       for (const user of data) {
         for (const address of user.emailAddresses) {
+          if (address.verification?.status !== "verified") continue;
+
           found.set(address.emailAddress.toLowerCase(), {
             name: user.fullName || user.username || "",
             imageUrl: user.imageUrl,

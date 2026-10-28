@@ -33,9 +33,6 @@ export async function getCurrentProjectIdentity(): Promise<ProjectIdentity | nul
   if (!user) return null;
 
   const emails = new Set<string>();
-  const primaryEmail = user.primaryEmailAddress?.emailAddress.trim().toLowerCase();
-  if (primaryEmail) emails.add(primaryEmail);
-
   for (const email of user.emailAddresses) {
     const normalized = email.emailAddress.trim().toLowerCase();
     if (normalized && email.verification?.status === "verified") emails.add(normalized);
