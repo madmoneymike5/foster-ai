@@ -2,6 +2,8 @@ import 'server-only';
 
 import { Liveblocks } from "@liveblocks/node";
 
+export const LIVEBLOCKS_REQUEST_TIMEOUT_MS = 8_000;
+
 /**
  * Fixed cursor-color palette. Colors are deliberately distinct on the dark
  * canvas so overlapping cursors stay readable. These are data values carried

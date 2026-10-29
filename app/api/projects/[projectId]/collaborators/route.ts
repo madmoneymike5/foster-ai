@@ -3,7 +3,10 @@ import {
   listCollaborators,
   normalizeEmail,
 } from "@/lib/collaborators";
-import { getLiveblocksClient } from "@/lib/liveblocks";
+import {
+  getLiveblocksClient,
+  LIVEBLOCKS_REQUEST_TIMEOUT_MS,
+} from "@/lib/liveblocks";
 import { checkProjectAccess, getCurrentProjectIdentity } from "@/lib/project-access";
 import { db } from "@/lib/prisma";
 import { isProjectId } from "@/lib/slug";
@@ -11,6 +14,21 @@ import { isProjectId } from "@/lib/slug";
 type CollaboratorRouteContext = {
   params: Promise<{ projectId: string }>;
 };
+
+/** Clerk's list endpoint has no per-request AbortSignal option. */
+function withRequestTimeout<T>(request: Promise<T>, operation: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutRequest = new Promise<never>((_, reject) => {
+    timeout = setTimeout(
+      () => reject(new Error(`${operation} timed out after ${LIVEBLOCKS_REQUEST_TIMEOUT_MS}ms`)),
+      LIVEBLOCKS_REQUEST_TIMEOUT_MS,
+    );
+  });
+
+  return Promise.race([request, timeoutRequest]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
 
 /**
  * Narrow parsed JSON to the object shape accepted by the collaborator API.
@@ -186,6 +204,9 @@ export async function DELETE(request: Request, context: CollaboratorRouteContext
     if (project.ownerId !== identity.userId) {
       return Response.json({ error: "Project ownership required" }, { status: 403 });
     }
+    if (project.status !== "DRAFT") {
+      return Response.json({ error: "Project deletion is already in progress" }, { status: 409 });
+    }
 
     const collaborators = await tx.orm.public.ProjectCollaborator.where((w) =>
       w.projectId.eq(projectId),
@@ -199,14 +220,25 @@ export async function DELETE(request: Request, context: CollaboratorRouteContext
       const remainingEmails = collaborators
         .filter((row) => row.email !== email)
         .map((row) => row.email);
-      const permittedUserIds = await getVerifiedClerkUserIdsByEmails(remainingEmails);
+      const [permittedUserIds, removedUserIds] = await Promise.all([
+        withRequestTimeout(
+          getVerifiedClerkUserIdsByEmails(remainingEmails),
+          "Clerk remaining collaborator lookup",
+        ),
+        withRequestTimeout(
+          getVerifiedClerkUserIdsByEmails([email]),
+          "Clerk removed collaborator lookup",
+        ),
+      ]);
       // The owner remains authorized even if they also have a collaborator row.
       permittedUserIds.add(identity.userId);
 
       const liveblocks = getLiveblocksClient();
       let room: Awaited<ReturnType<typeof liveblocks.getRoom>> | null = null;
       try {
-        room = await liveblocks.getRoom(projectId);
+        room = await liveblocks.getRoom(projectId, {
+          signal: AbortSignal.timeout(LIVEBLOCKS_REQUEST_TIMEOUT_MS),
+        });
       } catch (error) {
         if (!isLiveblocksNotFound(error)) throw error;
       }
@@ -215,21 +247,29 @@ export async function DELETE(request: Request, context: CollaboratorRouteContext
         const revokedUserIds = Object.keys(room.usersAccesses).filter(
           (userId) => !permittedUserIds.has(userId),
         );
+        const revokeTargets = new Set([
+          ...revokedUserIds,
+          ...[...removedUserIds].filter((userId) => !permittedUserIds.has(userId)),
+        ]);
         if (revokedUserIds.length > 0) {
           await liveblocks.updateRoom(projectId, {
             usersAccesses: Object.fromEntries(
               revokedUserIds.map((userId) => [userId, null]),
             ),
+          }, {
+            signal: AbortSignal.timeout(LIVEBLOCKS_REQUEST_TIMEOUT_MS),
           });
-          await Promise.all(
-            revokedUserIds.map((userId) =>
-              liveblocks.broadcastEvent(projectId, {
-                type: "access-revoked",
-                userId,
-              }),
-            ),
-          );
         }
+        await Promise.all(
+          [...revokeTargets].map((userId) =>
+            liveblocks.broadcastEvent(projectId, {
+              type: "access-revoked",
+              userId,
+            }, {
+              signal: AbortSignal.timeout(LIVEBLOCKS_REQUEST_TIMEOUT_MS),
+            }),
+          ),
+        );
       }
     } catch (error) {
       console.error(

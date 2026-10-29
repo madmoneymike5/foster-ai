@@ -224,17 +224,39 @@ export function createClerkActorManager({ browser, appUrl, clerkSecret, repo, or
  * Deletes temporary Clerk users and organizations created by a smoke runner.
  *
  * @param {{ clerkApi: (path: string, init?: RequestInit) => Promise<unknown>, userIds: Record<string, string>, orgPrefix: string }} options - Fixture identifiers.
- * @returns {Promise<void>} Resolves after best-effort cleanup.
+ * @returns {Promise<void>} Resolves when cleanup succeeds; rejects if any fixture cleanup fails.
  */
 export async function cleanupClerkFixtures({ clerkApi, userIds, orgPrefix }) {
+  const errors = [];
+
   for (const userId of Object.values(userIds)) {
-    if (userId) await clerkApi(`/v1/users/${userId}`, { method: "DELETE" }).catch(() => undefined);
-  }
-  const organizations = await clerkApi("/v1/organizations").catch(() => []);
-  const list = Array.isArray(organizations) ? organizations : organizations.data || [];
-  for (const organization of list) {
-    if (organization.name?.startsWith(orgPrefix)) {
-      await clerkApi(`/v1/organizations/${organization.id}`, { method: "DELETE" }).catch(() => undefined);
+    if (!userId) continue;
+    try {
+      await clerkApi(`/v1/users/${userId}`, { method: "DELETE" });
+    } catch (error) {
+      errors.push(new Error(`Failed to delete Clerk fixture user ${userId}`, { cause: error }));
     }
+  }
+
+  let organizations = [];
+  try {
+    const response = await clerkApi("/v1/organizations");
+    organizations = Array.isArray(response) ? response : response.data || [];
+  } catch (error) {
+    errors.push(new Error("Failed to list Clerk fixture organizations", { cause: error }));
+  }
+
+  const list = organizations;
+  for (const organization of list) {
+    if (!organization.name?.startsWith(orgPrefix)) continue;
+    try {
+      await clerkApi(`/v1/organizations/${organization.id}`, { method: "DELETE" });
+    } catch (error) {
+      errors.push(new Error(`Failed to delete Clerk fixture organization ${organization.id}`, { cause: error }));
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new AggregateError(errors, `Failed to clean up ${errors.length} Clerk fixture resource(s)`);
   }
 }

@@ -3,6 +3,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import {
   getCursorColorForUser,
   getLiveblocksClient,
+  LIVEBLOCKS_REQUEST_TIMEOUT_MS,
 } from "@/lib/liveblocks";
 import { getCurrentProjectIdentity } from "@/lib/project-access";
 import { db } from "@/lib/prisma";
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
     const project = await tx.orm.public.Project.where({ id: room })
       .forNoKeyUpdate()
       .first();
-    if (!project) return null;
+    if (!project || project.status !== "DRAFT") return null;
 
     let hasAccess = project.ownerId === identity.userId;
     if (!hasAccess && identity.accessEmails.length > 0) {
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
           usersAccesses: { [identity.userId]: ["*:write"] },
         },
         create: { defaultAccesses: [] },
-      });
+      }, { signal: AbortSignal.timeout(LIVEBLOCKS_REQUEST_TIMEOUT_MS) });
       return { client };
     } catch (error) {
       console.error(`Failed to ensure Liveblocks room ${project.id}:`, error);

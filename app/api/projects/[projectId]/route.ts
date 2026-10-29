@@ -1,6 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 
-import { getLiveblocksClient } from "@/lib/liveblocks";
+import {
+  getLiveblocksClient,
+  LIVEBLOCKS_REQUEST_TIMEOUT_MS,
+} from "@/lib/liveblocks";
 import { db } from "@/lib/prisma";
 import { normalizeProjectName } from "@/lib/project-name";
 import { isProjectId } from "@/lib/slug";
@@ -85,8 +88,15 @@ export async function PATCH(request: Request, context: ProjectRouteContext) {
   if (project.ownerId !== userId) {
     return Response.json({ error: "Project ownership required" }, { status: 403 });
   }
+  if (project.status !== "DRAFT") {
+    return Response.json({ error: "Project deletion is already in progress" }, { status: 409 });
+  }
 
-  const updatedProject = await db.orm.public.Project.where({ id: projectId, ownerId: userId }).update({
+  const updatedProject = await db.orm.public.Project.where({
+    id: projectId,
+    ownerId: userId,
+    status: "DRAFT",
+  }).update({
     name: body.name,
   });
   if (!updatedProject) {
@@ -110,8 +120,9 @@ export async function DELETE(_request: Request, context: ProjectRouteContext) {
     return Response.json({ error: "Invalid project ID" }, { status: 400 });
   }
 
-  return db.transaction(async (tx) => {
-    // Match the token endpoint's lock so room deletion follows any grant upsert.
+  const reservation = await db.transaction(async (tx) => {
+    // Commit a durable reservation before the external room deletion. The
+    // project row keeps its ID unique while room cleanup runs or is retried.
     const project = await tx.orm.public.Project.where({ id: projectId })
       .forNoKeyUpdate()
       .first();
@@ -122,16 +133,43 @@ export async function DELETE(_request: Request, context: ProjectRouteContext) {
       return Response.json({ error: "Project ownership required" }, { status: 403 });
     }
 
-    try {
-      // Delete the room before its project ID can be reused. Liveblocks treats
-      // deleting a missing room as a successful no-op.
-      await getLiveblocksClient().deleteRoom(projectId);
-    } catch (error) {
-      console.error(`Failed to delete Liveblocks room ${projectId}:`, error);
-      return Response.json(
-        { error: "Project room could not be deleted" },
-        { status: 502 },
-      );
+    if (project.status === "DRAFT") {
+      const reserved = await tx.orm.public.Project.where({
+        id: projectId,
+        ownerId: userId,
+      }).update({ status: "ARCHIVED" });
+      if (!reserved) {
+        return Response.json({ error: "Project not found" }, { status: 404 });
+      }
+    }
+
+    return null;
+  });
+  if (reservation) return reservation;
+
+  try {
+    // Auth rejects ARCHIVED projects, so no grant can recreate this room.
+    // Liveblocks treats deleting a missing room as a successful no-op.
+    await getLiveblocksClient().deleteRoom(projectId, {
+      signal: AbortSignal.timeout(LIVEBLOCKS_REQUEST_TIMEOUT_MS),
+    });
+  } catch (error) {
+    console.error(`Failed to delete Liveblocks room ${projectId}:`, error);
+    return Response.json(
+      { error: "Project room could not be deleted" },
+      { status: 502 },
+    );
+  }
+
+  return db.transaction(async (tx) => {
+    const project = await tx.orm.public.Project.where({ id: projectId })
+      .forNoKeyUpdate()
+      .first();
+    if (!project) {
+      return Response.json({ error: "Project not found" }, { status: 404 });
+    }
+    if (project.ownerId !== userId) {
+      return Response.json({ error: "Project ownership required" }, { status: 403 });
     }
 
     const deletedProject = await tx.orm.public.Project.where({

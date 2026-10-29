@@ -41,10 +41,13 @@
   the Liveblocks room before its project ID can be reused.
 - Collaborator removal and Liveblocks token grant-upserts serialize on a
   PostgreSQL project-row lock; the token endpoint checks membership while
-  holding that lock before writing the grant.
-- Project deletion takes the same lock before deleting the Liveblocks room and
-  project, preventing an in-flight token request from recreating the room after
-  deletion.
+  holding that lock before writing the grant. External lookups and Liveblocks
+  requests in the locked revoke path have explicit timeouts.
+- Project deletion commits an `ARCHIVED` reservation while holding the same
+  project-row lock, then deletes the Liveblocks room outside the transaction.
+  The token endpoint rejects reserved projects, and the project row keeps the
+  ID unavailable until room deletion succeeds and the row is removed. A failed
+  room deletion leaves the reservation in place for retry.
 - Liveblocks does not disconnect an existing connection when a user grant is
   removed. Collaborator removal broadcasts a targeted `access-revoked` room
   event after removing stale grants; the room client disconnects and unmounts

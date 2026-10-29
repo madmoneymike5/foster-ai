@@ -42,6 +42,7 @@ const password = `Spec10smoke!${timestamp}`;
 let browser;
 let actorManager;
 let projectCreated = false;
+let projectCreationAttempted = false;
 let roomCreated = false;
 
 function check(name, ok, detail = "") {
@@ -98,8 +99,14 @@ async function createFixtureUsers() {
 async function deleteProjectDirectly() {
   const client = new pg.Client({ connectionString: DATABASE_URL });
   await client.connect();
-  await client.query('DELETE FROM "Project" WHERE id = $1', [projectId]);
-  await client.end();
+  try {
+    return await client.query(
+      'DELETE FROM "Project" WHERE id = $1 AND "ownerId" = $2',
+      [projectId, userIds.owner],
+    );
+  } finally {
+    await client.end();
+  }
 }
 
 async function checkDatabaseCleanup() {
@@ -147,16 +154,17 @@ try {
   );
   check("unauthenticated -> 401 JSON", response.status === 401 && !!response.body?.error, `status=${response.status}`);
 
+  projectCreationAttempted = true;
   response = await actors.owner.fetch("/api/projects", {
     method: "POST",
     body: JSON.stringify({ name: "Spec10 Smoke", id: projectId }),
   });
   projectCreated = response.status === 201;
+  roomCreated = projectCreated;
   check("owner creates project", projectCreated && response.body?.project?.id === projectId, `status=${response.status}`);
 
   // The route upserts the room before it asks Liveblocks to issue the token.
-  // Cleanup must therefore try to delete it even if token issuance fails.
-  roomCreated = true;
+  // Cleanup tracks room ownership from project creation, including token failure.
   response = await actors.owner.fetch("/api/liveblocks-auth", {
     method: "POST",
     body: JSON.stringify({ room: projectId }),
@@ -249,11 +257,29 @@ try {
     const gone = await liveblocksApi(`/rooms/${projectId}`).catch(() => ({ status: 0 }));
     check("cleanup: room gone (404)", gone.status === 404, `status=${gone.status}`);
   }
-  if (projectCreated) {
-    await deleteProjectDirectly().catch(() => undefined);
-    console.log(`fallback cleanup removed known fixture project ${projectId}`);
+  if (projectCreationAttempted) {
+    try {
+      const deletion = await deleteProjectDirectly();
+      console.log(
+        `owner-scoped fallback cleanup checked project ${projectId} (deleted ${deletion.rowCount})`,
+      );
+    } catch (error) {
+      check(
+        "cleanup: owner-scoped project deletion",
+        false,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
-  await cleanupClerkFixtures({ clerkApi, userIds, orgPrefix });
+  try {
+    await cleanupClerkFixtures({ clerkApi, userIds, orgPrefix });
+  } catch (error) {
+    check(
+      "cleanup: Clerk fixtures",
+      false,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
   await actorManager?.close();
   await browser?.close();
   await checkDatabaseCleanup();

@@ -63,7 +63,7 @@ export async function checkProjectAccess(
   if (!isProjectId(projectId)) return null;
 
   const project = await db.orm.public.Project.first({ id: projectId });
-  if (!project) return null;
+  if (!project || project.status !== "DRAFT") return null;
 
   if (project.ownerId === identity.userId) {
     return { project: { id: project.id, name: project.name }, isOwner: true };

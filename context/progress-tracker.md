@@ -4,16 +4,17 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase (ONLY ONE AT A TIME!)
 
-Feature spec 11 complete — base collaborative canvas implementation and production build verified.
+Feature spec 11 complete — base collaborative canvas implementation and production build verified; CodeRabbit review follow-ups applied and validated.
 
 ## Current Goal (ONLY ONE AT A TIME!)
 
-Feature spec 11 is implemented and served through localhost:3005. Keep all changes uncommitted.
+Feature spec 11 is committed on `development` as `70a72ba`. Only the CodeRabbit review follow-up changes are uncommitted.
 
 ## Completed
 
+- CodeRabbit review follow-up fixes are uncommitted and validated with lint, TypeScript, the smoke helper tests, and smoke-script syntax checks. Collaborator removal bounds Clerk and Liveblocks calls, retries targeted revocation broadcasts for verified removed-email users, and only clears existing grants. Project deletion commits an `ARCHIVED` ID reservation before deleting the Liveblocks room outside the transaction; auth and project access reject the reservation, and failures leave it available for retry. Spec 10 cleanup scopes fallback project deletion to the fixture owner and fails runner checks on Clerk cleanup errors. React Flow styles load in Tailwind's `components` layer; `ReactFlow` retains `bg-base`.
 - Progress state carried forward into spec 11: specs 08 and 09 were implemented and verified on `development`; spec 07 was complete and ready for review in PR #4. Project IDs are slug-based text values with a suffix (for example, `pricing-page-a1b2`) and also serve as the `/editor/[roomId]` segment and Liveblocks room ID. Migration `migrations/app/20261027T2058_slug_based_project_ids` changed the project and collaborator IDs from UUID to text; `POST /api/projects` accepts the client-generated ID. Long slugs are truncated so the complete ID stays within the 100-character validator limit.
-- Implemented feature spec 11 (base canvas) on `development` (uncommitted per Sarah's instruction):
+- Implemented feature spec 11 (base canvas) on `development` (committed as `70a72ba`):
   - `types/canvas.ts` defines the shared node data, supported shape names, eight paired node colors, default node color, and `canvasNode`/`canvasEdge` types.
   - `components/editor/live-canvas.tsx` owns the Liveblocks provider and room, suspense loading, connection error fallback, targeted access-revocation handling, and the typed React Flow canvas with synced node/edge changes, loose connections, fit view, minimap, and dot background.
   - `components/editor/editor-workspace.tsx` replaces the active-project placeholder with the canvas while leaving the server workspace page and project authorization intact; `app/globals.css` imports the React Flow styles.
