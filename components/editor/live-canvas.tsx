@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   LiveblocksProvider,
   RoomProvider,
@@ -20,9 +20,21 @@ import {
   ConnectionMode,
   MiniMap,
   ReactFlow,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 
-import type { CanvasEdge, CanvasNode } from "@/types/canvas";
+import { canvasNodeTypes } from "@/components/editor/canvas-node";
+import {
+  parseShapeDragPayload,
+  SHAPE_DRAG_MIME,
+  type ShapeDragPayload,
+  ShapePanel,
+} from "@/components/editor/shape-panel";
+import { DEFAULT_NODE_COLOR, type CanvasEdge, type CanvasNode } from "@/types/canvas";
+
+// Session-scoped node counter so quickly repeated drops get unique IDs even
+// within the same millisecond.
+let nodeCounter = 0;
 
 interface LiveCanvasProps {
   roomId: string;
@@ -126,26 +138,88 @@ function LiveFlowCanvas() {
     edges: { initial: [] },
     suspense: true,
   });
+  const flowInstanceRef =
+    useRef<ReactFlowInstance<CanvasNode, CanvasEdge> | null>(null);
+
+  const addCanvasNode = useCallback(
+    (payload: ShapeDragPayload, position: { x: number; y: number }) => {
+      const id = `${payload.shape}-${Date.now()}-${nodeCounter++}`;
+      onNodesChange([
+        {
+          type: "add",
+          item: {
+            id,
+            type: "canvasNode",
+            position,
+            style: {
+              width: `${payload.width}px`,
+              height: `${payload.height}px`,
+            },
+            data: {
+              label: "",
+              color: DEFAULT_NODE_COLOR,
+              shape: payload.shape,
+            },
+          },
+        },
+      ]);
+    },
+    [onNodesChange],
+  );
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes(SHAPE_DRAG_MIME)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes(SHAPE_DRAG_MIME)) return;
+    event.preventDefault();
+
+    const payload = parseShapeDragPayload(
+      event.dataTransfer.getData(SHAPE_DRAG_MIME),
+    );
+    const instance = flowInstanceRef.current;
+    if (!payload || !instance) return;
+
+    const position = instance.screenToFlowPosition({
+      x: event.clientX,
+      y: event.clientY,
+    });
+    addCanvasNode(payload, position);
+  };
 
   return (
-    <ReactFlow<CanvasNode, CanvasEdge>
-      className="bg-base"
-      colorMode="dark"
-      nodes={nodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
-      onDelete={onDelete}
-      connectionMode={ConnectionMode.Loose}
-      fitView
+    <div
+      className="relative h-full min-h-0 w-full"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
-      <MiniMap />
-      <Background
-        variant={BackgroundVariant.Dots}
-        color="var(--border-default)"
-      />
-    </ReactFlow>
+      <ReactFlow<CanvasNode, CanvasEdge>
+        className="bg-base"
+        colorMode="dark"
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={canvasNodeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onDelete={onDelete}
+        onInit={(instance) => {
+          flowInstanceRef.current = instance;
+        }}
+        connectionMode={ConnectionMode.Loose}
+        fitView
+      >
+        <MiniMap />
+        <Background
+          variant={BackgroundVariant.Dots}
+          color="var(--border-default)"
+        />
+      </ReactFlow>
+      <ShapePanel />
+    </div>
   );
 }
 
