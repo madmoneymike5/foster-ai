@@ -68,3 +68,12 @@ Progress state must reflect the actual state of the implementation, not the inte
 1. The current unit works end to end within its defined scope.
 2. No invariant defined in `architecture-context.md` was violated.
 3. `progress-tracker.md` reflects the completed work.
+
+## Authenticated Smoke Testing
+
+- Authenticated feature smoke tests must use the shared helper in `scripts/smoke/clerk-actors.mjs` and the repository's installed Playwright dependency.
+- Each test actor gets an isolated Playwright context. Requests use `actor.fetch()` so the helper can renew the short-lived development Clerk session before expiry.
+- Never copy a Clerk cookie once and reuse it for an entire suite. Never duplicate impersonation-ticket, JWT-expiry, or cookie-renewal logic inside a feature runner.
+- Keep temporary users, organizations, projects, rooms, and collaborator rows under exact generated fixture identifiers and clean them up in `finally` blocks. Do not use broad destructive cleanup when an exact ID is available.
+- Do not weaken production Clerk middleware, route handlers, or environment configuration to accommodate a smoke harness.
+- Every new authenticated smoke runner must document its real failure modes and use the shared helper; the optional `smoke:spec10:expiry` command is the regression model for session renewal.

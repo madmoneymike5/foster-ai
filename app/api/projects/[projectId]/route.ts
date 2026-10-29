@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 
+import { getLiveblocksClient } from "@/lib/liveblocks";
 import { db } from "@/lib/prisma";
 import { normalizeProjectName } from "@/lib/project-name";
 import { isProjectId } from "@/lib/slug";
@@ -109,18 +110,38 @@ export async function DELETE(_request: Request, context: ProjectRouteContext) {
     return Response.json({ error: "Invalid project ID" }, { status: 400 });
   }
 
-  const project = await db.orm.public.Project.first({ id: projectId });
-  if (!project) {
-    return Response.json({ error: "Project not found" }, { status: 404 });
-  }
-  if (project.ownerId !== userId) {
-    return Response.json({ error: "Project ownership required" }, { status: 403 });
-  }
+  return db.transaction(async (tx) => {
+    // Match the token endpoint's lock so room deletion follows any grant upsert.
+    const project = await tx.orm.public.Project.where({ id: projectId })
+      .forNoKeyUpdate()
+      .first();
+    if (!project) {
+      return Response.json({ error: "Project not found" }, { status: 404 });
+    }
+    if (project.ownerId !== userId) {
+      return Response.json({ error: "Project ownership required" }, { status: 403 });
+    }
 
-  const deletedProject = await db.orm.public.Project.where({ id: projectId, ownerId: userId }).delete();
-  if (!deletedProject) {
-    return Response.json({ error: "Project not found" }, { status: 404 });
-  }
+    try {
+      // Delete the room before its project ID can be reused. Liveblocks treats
+      // deleting a missing room as a successful no-op.
+      await getLiveblocksClient().deleteRoom(projectId);
+    } catch (error) {
+      console.error(`Failed to delete Liveblocks room ${projectId}:`, error);
+      return Response.json(
+        { error: "Project room could not be deleted" },
+        { status: 502 },
+      );
+    }
 
-  return Response.json({ project: deletedProject });
+    const deletedProject = await tx.orm.public.Project.where({
+      id: projectId,
+      ownerId: userId,
+    }).delete();
+    if (!deletedProject) {
+      return Response.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    return Response.json({ project: deletedProject });
+  });
 }

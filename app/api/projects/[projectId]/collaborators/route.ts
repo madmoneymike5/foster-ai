@@ -1,4 +1,9 @@
-import { listCollaborators, normalizeEmail } from "@/lib/collaborators";
+import {
+  getVerifiedClerkUserIdsByEmails,
+  listCollaborators,
+  normalizeEmail,
+} from "@/lib/collaborators";
+import { getLiveblocksClient } from "@/lib/liveblocks";
 import { checkProjectAccess, getCurrentProjectIdentity } from "@/lib/project-access";
 import { db } from "@/lib/prisma";
 import { isProjectId } from "@/lib/slug";
@@ -21,6 +26,16 @@ function isUniqueViolation(error: unknown): boolean {
     error !== null &&
     "sqlState" in error &&
     (error as { sqlState: unknown }).sqlState === "23505"
+  );
+}
+
+/** Liveblocks throws an error with `status: 404` when a room does not exist. */
+function isLiveblocksNotFound(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    (error as { status: unknown }).status === 404
   );
 }
 
@@ -160,10 +175,81 @@ export async function DELETE(request: Request, context: CollaboratorRouteContext
     return Response.json({ error: "Project ownership required" }, { status: 403 });
   }
 
-  const removed = await db.orm.public.ProjectCollaborator.where({ projectId, email }).delete();
-  if (!removed) {
-    return Response.json({ error: "Collaborator not found" }, { status: 404 });
-  }
+  return db.transaction(async (tx) => {
+    // Match the token endpoint's lock so grant upserts cannot race this revoke.
+    const project = await tx.orm.public.Project.where({ id: projectId })
+      .forNoKeyUpdate()
+      .first();
+    if (!project) {
+      return Response.json({ error: "Project not found" }, { status: 404 });
+    }
+    if (project.ownerId !== identity.userId) {
+      return Response.json({ error: "Project ownership required" }, { status: 403 });
+    }
 
-  return Response.json({ collaborator: removed });
+    const collaborators = await tx.orm.public.ProjectCollaborator.where((w) =>
+      w.projectId.eq(projectId),
+    ).all();
+    const collaborator = collaborators.find((row) => row.email === email);
+    if (!collaborator) {
+      return Response.json({ error: "Collaborator not found" }, { status: 404 });
+    }
+
+    try {
+      const remainingEmails = collaborators
+        .filter((row) => row.email !== email)
+        .map((row) => row.email);
+      const permittedUserIds = await getVerifiedClerkUserIdsByEmails(remainingEmails);
+      // The owner remains authorized even if they also have a collaborator row.
+      permittedUserIds.add(identity.userId);
+
+      const liveblocks = getLiveblocksClient();
+      let room: Awaited<ReturnType<typeof liveblocks.getRoom>> | null = null;
+      try {
+        room = await liveblocks.getRoom(projectId);
+      } catch (error) {
+        if (!isLiveblocksNotFound(error)) throw error;
+      }
+
+      if (room) {
+        const revokedUserIds = Object.keys(room.usersAccesses).filter(
+          (userId) => !permittedUserIds.has(userId),
+        );
+        if (revokedUserIds.length > 0) {
+          await liveblocks.updateRoom(projectId, {
+            usersAccesses: Object.fromEntries(
+              revokedUserIds.map((userId) => [userId, null]),
+            ),
+          });
+          await Promise.all(
+            revokedUserIds.map((userId) =>
+              liveblocks.broadcastEvent(projectId, {
+                type: "access-revoked",
+                userId,
+              }),
+            ),
+          );
+        }
+      }
+    } catch (error) {
+      console.error(
+        `Failed to revoke Liveblocks access for collaborator ${email} in ${projectId}:`,
+        error,
+      );
+      return Response.json(
+        { error: "Collaborator access could not be revoked" },
+        { status: 502 },
+      );
+    }
+
+    const removed = await tx.orm.public.ProjectCollaborator.where({
+      projectId,
+      email,
+    }).delete();
+    if (!removed) {
+      return Response.json({ error: "Collaborator not found" }, { status: 404 });
+    }
+
+    return Response.json({ collaborator: removed });
+  });
 }

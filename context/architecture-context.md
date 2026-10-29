@@ -36,6 +36,19 @@
 - Only authenticated users can access protected routes.
 - Only the owner or a collaborator can mutate project resources.
 - Liveblocks room tokens are issued only after verifying project membership.
+- Removing a collaborator reconciles the room's user grants against the owner and
+  remaining collaborators with verified Clerk emails; project deletion removes
+  the Liveblocks room before its project ID can be reused.
+- Collaborator removal and Liveblocks token grant-upserts serialize on a
+  PostgreSQL project-row lock; the token endpoint checks membership while
+  holding that lock before writing the grant.
+- Project deletion takes the same lock before deleting the Liveblocks room and
+  project, preventing an in-flight token request from recreating the room after
+  deletion.
+- Liveblocks does not disconnect an existing connection when a user grant is
+  removed. Collaborator removal broadcasts a targeted `access-revoked` room
+  event after removing stale grants; the room client disconnects and unmounts
+  the room before showing an access-revoked state.
 
 ## Starter System Designs
 
