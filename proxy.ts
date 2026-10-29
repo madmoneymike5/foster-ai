@@ -9,11 +9,17 @@ const isPublicRoute = createRouteMatcher([
   `${AUTH_SIGN_IN_ROUTE}(.*)`,
   `${AUTH_SIGN_UP_ROUTE}(.*)`,
 ]);
-const isProjectApiRoute = createRouteMatcher(["/api/projects(.*)"]);
+// JSON API routes stay under Clerk middleware but skip navigation
+// redirects so each handler can return its own JSON status codes (401/
+// 400/403) instead of a Clerk sign-in redirect.
+const isJsonApiRoute = createRouteMatcher([
+  "/api/projects(.*)",
+  "/api/liveblocks-auth(.*)",
+]);
 
 export default clerkMiddleware(
   async (auth, req) => {
-    if (!isPublicRoute(req) && !isProjectApiRoute(req)) await auth.protect();
+    if (!isPublicRoute(req) && !isJsonApiRoute(req)) await auth.protect();
   },
   {
     // Explicit redirect target for auth.protect() so the SDK never

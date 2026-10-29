@@ -2,25 +2,25 @@
 
 Update this file whenever the current phase, active feature, or implementation state changes.
 
-## Current Phase
+## Current Phase (ONLY ONE AT A TIME!)
 
-- Phase 9: spec 09 — share dialog (collaborator invite/remove/list + Clerk name/avatar enrichment) — implemented and verified on `development` (uncommitted per Sarah's instruction)
-- Phase 8: spec 08 — `/editor/[roomId]` editor workspace shell with server-side access checks — implemented and verified on `development` (uncommitted per Sarah's instruction)
-- Phase 7: spec 07 — wire editor home to the real project API — complete on `development` and under review in PR #4
-- Process change (Oct 27): all future implementation work lands on `development`; `main` advances only via `development → main` PRs. See the Branch and Merge Flow section in `ai-workflow-rules.md`.
+Feature spec 11 complete — base collaborative canvas implementation and production build verified; CodeRabbit review follow-ups applied and validated.
 
-## Current Goal
+## Current Goal (ONLY ONE AT A TIME!)
 
-- Spec 09 (share dialog) is implemented and verified. Owners invite/remove collaborators and copy the project link; collaborators see a read-only collaborator list. Collaborator emails are enriched with a display name + avatar via the Clerk Backend API, falling back to email-only when no Clerk user matches. Access accepts only verified Clerk email addresses, including verified primary and secondary addresses, while storing the invited address.
-- Spec 08 is implemented and verified (see the Completed entry and the Verification Evidence below).
-- Spec 07 is implemented and verified: server-fetched project lists into the sidebar, `useProjectActions` with real create/rename/delete against the project APIs, and dialog wiring (room ID preview, pre-filled rename, named delete).
-- ID-design decision (Sarah, 2026-10-28): project IDs are slug-based, not UUIDs — `Project.id` is a `String` slug-suffix value (e.g. `pricing-page-a1b2`) that is simultaneously the project ID, the `/editor/[roomId]` URL segment, and the Liveblocks room ID (specs 07/08/10 stay aligned). The migration `migrations/app/20261027T2058_slug_based_project_ids` changed `Project.id` and `ProjectCollaborator.projectId` from UUID to text; `POST /api/projects` accepts the client-generated `id`. This supersedes the UUID v7 ID strategy from specs 05/06; those UUID references below are historical baseline evidence only.
-- Generated project IDs truncate long slugs to keep the complete slug-suffix value within the validator's 100-character limit.
-- Project create, rename, and delete dialogs show mutation failure messages; create conflicts refresh the preview suffix so the user can retry with a new ID.
-- PR #4 includes the follow-up validation, documentation, dependency, and JSDoc fixes requested by CodeRabbit; the branch is ready for review.
+Feature spec 11 is committed on `development` as `70a72ba`. Only the CodeRabbit review follow-up changes are uncommitted.
 
 ## Completed
 
+- CodeRabbit review follow-up fixes are uncommitted and validated with lint, TypeScript, the smoke helper tests, and smoke-script syntax checks. Collaborator removal bounds Clerk and Liveblocks calls, retries targeted revocation broadcasts for verified removed-email users, and only clears existing grants. Project deletion commits an `ARCHIVED` ID reservation before deleting the Liveblocks room outside the transaction; auth and project access reject the reservation, and failures leave it available for retry. Spec 10 cleanup scopes fallback project deletion to the fixture owner and fails runner checks on Clerk cleanup errors. React Flow styles load in Tailwind's `components` layer; `ReactFlow` retains `bg-base`.
+- Progress state carried forward into spec 11: specs 08 and 09 were implemented and verified on `development`; spec 07 was complete and ready for review in PR #4. Project IDs are slug-based text values with a suffix (for example, `pricing-page-a1b2`) and also serve as the `/editor/[roomId]` segment and Liveblocks room ID. Migration `migrations/app/20261027T2058_slug_based_project_ids` changed the project and collaborator IDs from UUID to text; `POST /api/projects` accepts the client-generated ID. Long slugs are truncated so the complete ID stays within the 100-character validator limit.
+- Implemented feature spec 11 (base canvas) on `development` (committed as `70a72ba`):
+  - `types/canvas.ts` defines the shared node data, supported shape names, eight paired node colors, default node color, and `canvasNode`/`canvasEdge` types.
+  - `components/editor/live-canvas.tsx` owns the Liveblocks provider and room, suspense loading, connection error fallback, targeted access-revocation handling, and the typed React Flow canvas with synced node/edge changes, loose connections, fit view, minimap, and dot background.
+  - `components/editor/editor-workspace.tsx` replaces the active-project placeholder with the canvas while leaving the server workspace page and project authorization intact; `app/globals.css` imports the React Flow styles.
+  - `liveblocks.config.ts` types the flow storage and revocation event. Collaborator removal sends the targeted event after reconciling room grants; the client disconnects and unmounts the room before showing the access-revoked state.
+  - No controls, custom node/edge rendering, persistence, or AI behavior were added.
+- The access-revocation listener handles `access-revoked` only when Liveblocks identifies the sender as a server event (`user === null`, `connectionId === -1`), then still checks the event type and recipient user ID.
 - Read the project, architecture, UI, code standards, workflow, and design-system feature context.
 - Established the local Git baseline and linked worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/design-system`.
 - Initialized shadcn/ui and added Button, Card, Dialog, Input, Tabs, Textarea, and ScrollArea.
@@ -81,6 +81,17 @@ Update this file whenever the current phase, active feature, or implementation s
   - `app/api/projects/[projectId]/route.ts` — UUID-validated owner-only rename and delete handlers with `404` missing-project and `403` non-owner responses.
   - `proxy.ts` — `/api/projects(.*)` remains inside Clerk middleware but bypasses navigation redirects so handlers can return JSON `401` responses.
   - No schema, dependency, UI, commit, push, or PR changes were made.
+- Implemented feature spec 10 (Liveblocks setup) on `development` (uncommitted per Sarah's instruction):
+  - `liveblocks.config.ts` defines the spec's typed Presence and UserMeta contracts.
+  - `lib/liveblocks.ts` provides a cached server-only Liveblocks node client and deterministic FNV-1a cursor colors from a fixed palette.
+  - `app/api/liveblocks-auth/route.ts` validates the room ID, checks Clerk identity and project access, upserts a private room with per-user write access, and issues an ID-token session carrying user metadata.
+  - `proxy.ts` keeps JSON API routes on handler-controlled `401`/`400`/`403` responses instead of Clerk navigation redirects.
+  - No `components/ui/*` files were modified.
+- Added durable authenticated smoke infrastructure on `development` (uncommitted per Sarah's instruction):
+  - `scripts/smoke/clerk-actors.mjs` owns isolated Playwright actors, browser-side app requests, copied-cookie renewal below the 15-second threshold, renewal locking, and fixture cleanup helpers.
+  - `scripts/smoke/spec10.mjs` is the repository runner; `scripts/smoke/clerk-actors.test.mjs` covers the renewal boundary with `node:test`.
+  - `scripts/smoke/README.md` and `context/ai-workflow-rules.md` prohibit frozen-cookie reuse and feature-local Clerk renewal logic.
+  - `package.json` exposes `test:smoke-helper`, `smoke:spec10`, and `smoke:spec10:expiry`; Playwright and pg are declared dev dependencies.
 - Implemented feature spec 09 (share dialog) on `development` (uncommitted per Sarah's instruction):
   - `app/api/projects/[projectId]/collaborators/route.ts` — authenticated collaborator list for owners/collaborators, owner-only invite/remove, normalized email validation, duplicate-invite `409`, and uniform project-access `404` behavior.
   - `lib/collaborators.ts` — server-only Clerk enrichment with display-name/avatar fallback, independent batches of at most 100 email lookups, and email normalization.
@@ -100,13 +111,34 @@ Update this file whenever the current phase, active feature, or implementation s
   - `app/editor/page.tsx` — refactored to use `getCurrentProjectIdentity()` (same behavior as before; the helper is now shared with the roomId route).
   - No `components/ui/*` files modified; no canvas logic, Liveblocks, AI chat, or sharing behavior added.
 
-## In Progress
+## In Progress (ONLY ONE AT A TIME!)
 
-- None — spec 09 is complete and verified; no feature work is in flight.
+- None — feature spec 11 is complete and verified; spec 12 is next.
 
-## Next Up
+## Open Questions
 
-- Spec 10 (Liveblocks setup) per the spec list, once spec 09 is implemented and verified.
+- Presence field name drift: spec 10 defines `isThinking`, but specs 19/24 refer to presence field `thinking`. Implementing spec 10 as written (`isThinking`); spec 19/24 should be aligned or this renamed before spec 19 lands.
+
+## Next Up (ONLY ONE AT A TIME!)
+
+- Spec 12 (shape panel) per the feature spec list, after spec 11 is implemented and verified.
+
+## Verification Evidence (spec 11)
+
+- `npm run build -- --webpack` passed in an isolated copy of the worktree, including TypeScript and route generation for `/editor/[roomId]` and `/api/liveblocks-auth`. The default Turbopack build was also attempted but is blocked in this sandbox by Google Fonts network access and Turbopack local-port binding restrictions.
+- The existing signed-in browser tab at `http://localhost:3005/editor` rendered the current workspace; no project existed in the sidebar to open a live room without creating a fixture.
+- `git diff --check` passes. No tests were added or run.
+- No commit was created.
+
+## Verification Evidence (spec 10)
+
+- Test-quality gate applied before verification. Kept checks protect the authentication boundary, room privacy, per-user permission merging, malformed input responses, metadata attachment, token renewal, and cleanup. The shared renewal decision has focused `node:test` coverage; the live runner exercises the actual localhost:3005 contract.
+- `npm run lint`, `npx tsc --noEmit`, and `npm run build` pass. The build registers `/api/liveblocks-auth` as a dynamic route.
+- Corrected Playwright smoke against `http://localhost:3005`: **22/22 checks passed** — unauthenticated `401`, owner project creation, Liveblocks ID-token metadata (`ui` claim), private room creation, owner grant, malformed-input `400`s, collaborator grant merge on an existing room, unauthorized/missing-project `403`s, room deletion, and zero fixture database rows.
+- Forced-expiry regression: after waiting 65 seconds beyond the initial 60-second Clerk JWT lifetime, the harness renewed the owner, collaborator, and outsider sessions through fresh impersonation tickets and again passed **22/22** checks. The harness now keeps isolated Playwright contexts per user, refreshes the copied localhost cookies when fewer than 15 seconds remain, and performs app requests from each actor's browser page.
+- The original `401` failure was a smoke-harness bug, not production Clerk or Liveblocks behavior. The durable fix is `scripts/smoke/clerk-actors.mjs`; feature runners must use `actor.fetch()` rather than copied cookie headers.
+- CodeRabbit lifecycle follow-up: `npm run lint` and `npx tsc --noEmit` complete without diagnostics. The authenticated smoke suite was not rerun. Collaborator removal reconciles room grants against the owner and remaining verified collaborator IDs, project deletion deletes the Liveblocks room, and the smoke runner checks revoked grants, denied reauthentication, deleted rooms, and cleanup accepting `404` when the room was never created. Spec 11 subsequently satisfies the active-connection prerequisite with a targeted access-revoked event and immediate room disconnect.
+- Known earlier `spec10-smoke-*` orphan projects were removed by exact prefix; the unrelated `test-pa3gh` project was left untouched. No credentials or session values were written to the repository.
 
 ## Verification Evidence (spec 09)
 

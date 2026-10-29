@@ -17,6 +17,44 @@ export interface Collaborator {
   avatarUrl: string | null;
 }
 
+/**
+ * Resolves the Clerk IDs that currently have verified access through the given
+ * collaborator email addresses. The result is used to reconcile Liveblocks
+ * grants, including grants left by accounts that no longer exist in Clerk.
+ *
+ * @param emails - Normalized collaborator emails stored in the project rows.
+ * @returns The Clerk user IDs with at least one matching verified address.
+ */
+export async function getVerifiedClerkUserIdsByEmails(
+  emails: string[],
+): Promise<Set<string>> {
+  const userIds = new Set<string>();
+  const uniqueEmails = [...new Set(emails)];
+  if (uniqueEmails.length === 0) return userIds;
+
+  const client = await clerkClient();
+  const batchSize = 100;
+  for (let start = 0; start < uniqueEmails.length; start += batchSize) {
+    const batch = new Set(uniqueEmails.slice(start, start + batchSize));
+    const { data } = await client.users.getUserList({
+      emailAddress: [...batch],
+      limit: batchSize,
+    });
+    for (const user of data) {
+      if (
+        user.emailAddresses.some(
+          (address) =>
+            address.verification?.status === "verified" &&
+            batch.has(address.emailAddress.toLowerCase()),
+        )
+      ) {
+        userIds.add(user.id);
+      }
+    }
+  }
+  return userIds;
+}
+
 /** RFC 5321 maximum mailbox length; longer values are rejected at the boundary. */
 const MAX_EMAIL_LENGTH = 320;
 

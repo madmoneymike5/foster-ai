@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { AiSidebar } from "@/components/editor/ai-sidebar";
 import { EditorNavbar } from "@/components/editor/editor-navbar";
+import { LiveCanvas } from "@/components/editor/live-canvas";
 import { EditorHome } from "@/components/editor/editor-home";
 import { ProjectDialogs } from "@/components/editor/project-dialogs";
 import { ProjectSidebar } from "@/components/editor/project-sidebar";
@@ -71,13 +72,13 @@ export function EditorWorkspace({
           currentProjectId={activeProject?.id}
           defaultTab={activeProject?.isShared ? "shared" : "my-projects"}
         />
-        <main className="flex min-w-0 flex-1 items-center justify-center bg-base">
+        <main className="relative flex min-w-0 flex-1 overflow-hidden bg-base">
           {activeProject ? (
-            <p className="px-6 text-center text-sm text-copy-muted">
-              Your canvas will appear here.
-            </p>
+            <LiveCanvas key={activeProject.id} roomId={activeProject.id} />
           ) : (
-            <EditorHome onNewProject={actions.openCreate} />
+            <div className="flex min-h-0 flex-1 items-center justify-center">
+              <EditorHome onNewProject={actions.openCreate} />
+            </div>
           )}
         </main>
         {activeProject && (
