@@ -8,7 +8,7 @@ Feature spec 12 complete and verified — bottom pill toolbar with draggable sha
 
 ## Current Goal (ONLY ONE AT A TIME!)
 
-Spec 12 is committed as `9151ce3` and open in PR #7 (`development → main`); the CodeRabbit PR #7 follow-up fixes are the active unit.
+Spec 12 is committed as `9151ce3` and the CodeRabbit PR #7 follow-up as `768edef`; PR #7 (`development → main`) is updated and awaiting re-review.
 
 ## Completed
 
@@ -118,7 +118,7 @@ Spec 12 is committed as `9151ce3` and open in PR #7 (`development → main`); th
 
 ## In Progress (ONLY ONE AT A TIME!)
 
-- CodeRabbit PR #7 follow-up: cross-collaborator node ID collisions fixed with `crypto.randomUUID()`, click/keyboard shape activation at the canvas center, drag payload contract moved to `types/canvas.ts`, tracker wording corrected.
+- None — the CodeRabbit PR #7 follow-up is committed as `768edef` and pushed to PR #7; awaiting the CodeRabbit re-review on the new commit.
 
 ## Open Questions
 
