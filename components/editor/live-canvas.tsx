@@ -24,17 +24,17 @@ import {
 } from "@xyflow/react";
 
 import { canvasNodeTypes } from "@/components/editor/canvas-node";
+import { ShapePanel } from "@/components/editor/shape-panel";
 import {
-  parseShapeDragPayload,
+  DEFAULT_NODE_COLOR,
   SHAPE_DRAG_MIME,
+  SHAPE_SIZES,
+  parseShapeDragPayload,
+  type CanvasEdge,
+  type CanvasNode,
+  type CanvasNodeShape,
   type ShapeDragPayload,
-  ShapePanel,
-} from "@/components/editor/shape-panel";
-import { DEFAULT_NODE_COLOR, type CanvasEdge, type CanvasNode } from "@/types/canvas";
-
-// Session-scoped node counter so quickly repeated drops get unique IDs even
-// within the same millisecond.
-let nodeCounter = 0;
+} from "@/types/canvas";
 
 interface LiveCanvasProps {
   roomId: string;
@@ -140,10 +140,13 @@ function LiveFlowCanvas() {
   });
   const flowInstanceRef =
     useRef<ReactFlowInstance<CanvasNode, CanvasEdge> | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const addCanvasNode = useCallback(
     (payload: ShapeDragPayload, position: { x: number; y: number }) => {
-      const id = `${payload.shape}-${Date.now()}-${nodeCounter++}`;
+      // RandomUUID so IDs stay unique across collaborators, not just within
+      // one browser session.
+      const id = crypto.randomUUID();
       onNodesChange([
         {
           type: "add",
@@ -190,11 +193,33 @@ function LiveFlowCanvas() {
     addCanvasNode(payload, position);
   };
 
+  /** Creates a shape centered in the canvas from click/keyboard activation. */
+  const handleCreateShape = (shape: CanvasNodeShape) => {
+    const instance = flowInstanceRef.current;
+    const container = containerRef.current;
+    if (!instance || !container) return;
+
+    const size = SHAPE_SIZES[shape];
+    const rect = container.getBoundingClientRect();
+    // screenToFlowPosition returns the flow point under the container center;
+    // shift by half the node's size so the node itself is centered there.
+    // The size is in flow space, so this stays correct under any pan/zoom.
+    const center = instance.screenToFlowPosition({
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    });
+    addCanvasNode(size, {
+      x: center.x - size.width / 2,
+      y: center.y - size.height / 2,
+    });
+  };
+
   return (
     <div
       className="relative h-full min-h-0 w-full"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
+      ref={containerRef}
     >
       <ReactFlow<CanvasNode, CanvasEdge>
         className="bg-base"
@@ -218,7 +243,7 @@ function LiveFlowCanvas() {
           color="var(--border-default)"
         />
       </ReactFlow>
-      <ShapePanel />
+      <ShapePanel onCreate={handleCreateShape} />
     </div>
   );
 }
