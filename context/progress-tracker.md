@@ -4,23 +4,28 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase (ONLY ONE AT A TIME!)
 
-Feature spec 11 complete — base collaborative canvas implementation and production build verified; CodeRabbit review follow-ups applied and validated.
+Feature spec 12 complete and verified — bottom pill toolbar with draggable shapes, drop-to-create nodes, and shape-aware SVG canvas rendering on the spec 11 canvas; pill geometry corrected per `context/current-issues.md`.
 
 ## Current Goal (ONLY ONE AT A TIME!)
 
-Feature spec 11 is committed on `development` as `70a72ba`. Only the CodeRabbit review follow-up changes are uncommitted.
+Spec 12 is committed as `9151ce3` and the CodeRabbit PR #7 follow-up as `768edef`; PR #7 (`development → main`) is updated and awaiting re-review.
 
 ## Completed
 
+- CodeRabbit PR #7 follow-up (spec 12 shapes, on `development` after `9151ce3`): node IDs now use `crypto.randomUUID()` instead of the per-session `${shape}-${timestamp}-${counter}` IDs that could collide across collaborators; shape toolbar buttons activate on click and keyboard (Enter/Space), creating the shape at the canvas container's center through `screenToFlowPosition`; `ShapeDragPayload`, `SHAPE_DRAG_MIME`, `SHAPE_SIZES`, and `parseShapeDragPayload` moved from `components/editor/shape-panel.tsx` into `types/canvas.ts` (which already owns `NODE_SHAPES`); the tracker's six-Lucide-icons wording corrected. Connection handles for canvas nodes are deferred: no feature spec covers connections yet, so shapes stay non-connectable until that spec lands. Validated with lint, `tsc --noEmit`, an isolated production build, and a live signed-in check on `localhost:3005`: toolbar-button activation created a node centered in the canvas container (measured offset 0,0) with a UUID node id, and the scratch `test-xylg4` room was reset to zero nodes after the check.
 - CodeRabbit review follow-up fixes are uncommitted and validated with lint, TypeScript, the smoke helper tests, and smoke-script syntax checks. Collaborator removal bounds Clerk and Liveblocks calls, retries targeted revocation broadcasts for verified removed-email users, and only clears existing grants. Project deletion commits an `ARCHIVED` ID reservation before deleting the Liveblocks room outside the transaction; auth and project access reject the reservation, and failures leave it available for retry. Spec 10 cleanup scopes fallback project deletion to the fixture owner and fails runner checks on Clerk cleanup errors. React Flow styles load in Tailwind's `components` layer; `ReactFlow` retains `bg-base`.
 - Progress state carried forward into spec 11: specs 08 and 09 were implemented and verified on `development`; spec 07 was complete and ready for review in PR #4. Project IDs are slug-based text values with a suffix (for example, `pricing-page-a1b2`) and also serve as the `/editor/[roomId]` segment and Liveblocks room ID. Migration `migrations/app/20261027T2058_slug_based_project_ids` changed the project and collaborator IDs from UUID to text; `POST /api/projects` accepts the client-generated ID. Long slugs are truncated so the complete ID stays within the 100-character validator limit.
 - Implemented feature spec 11 (base canvas) on `development` (committed as `70a72ba`):
-  - `types/canvas.ts` defines the shared node data, supported shape names, eight paired node colors, default node color, and `canvasNode`/`canvasEdge` types.
+  - `types/canvas.ts` defines the shared node data, supported shape names, eight paired node colors, default node color, `canvasNode`/`canvasEdge` types, and — moved in from the shape panel by the PR #7 follow-up — the shape drag payload contract (`ShapeDragPayload`, `SHAPE_DRAG_MIME`, `SHAPE_SIZES`, `parseShapeDragPayload`).
   - `components/editor/live-canvas.tsx` owns the Liveblocks provider and room, suspense loading, connection error fallback, targeted access-revocation handling, and the typed React Flow canvas with synced node/edge changes, loose connections, fit view, minimap, and dot background.
   - `components/editor/editor-workspace.tsx` replaces the active-project placeholder with the canvas while leaving the server workspace page and project authorization intact; `app/globals.css` imports the React Flow styles.
   - `liveblocks.config.ts` types the flow storage and revocation event. Collaborator removal sends the targeted event after reconciling room grants; the client disconnects and unmounts the room before showing the access-revoked state.
   - No controls, custom node/edge rendering, persistence, or AI behavior were added.
 - The access-revocation listener handles `access-revoked` only when Liveblocks identifies the sender as a server event (`user === null`, `connectionId === -1`), then still checks the event type and recipient user ID.
+- Implemented feature spec 12 (shape panel) on `development` (committed as `9151ce3`, open in PR #7):
+  - `components/editor/shape-panel.tsx` adds the bottom-center floating pill toolbar with six draggable icon buttons (five Lucide icons and one inline SVG pill icon); each button is draggable and activates on click or keyboard (Enter/Space) to create the shape at the canvas center.
+  - `components/editor/canvas-node.tsx` adds the registered `canvasNode` renderer: each supported shape uses lightweight inline SVG geometry with the label centered and the node color pair applied; the rectangle toolbar glyph uses Lucide's horizontal rectangle icon, and the pill uses explicit horizontal rounded-rectangle radii rather than an oval.
+  - `components/editor/live-canvas.tsx` wraps React Flow with `dragover`/`drop` handling, converts screen coordinates through `screenToFlowPosition`, and adds Liveblocks-synced nodes with empty labels, the default color, dragged shape, default size, and `crypto.randomUUID()` node IDs; click/keyboard creation converts the canvas container's center through `screenToFlowPosition`.
 - Read the project, architecture, UI, code standards, workflow, and design-system feature context.
 - Established the local Git baseline and linked worktree at `/home/sarah-taylor/Dev/worktrees/foster-ai--f5ed78e5/design-system`.
 - Initialized shadcn/ui and added Button, Card, Dialog, Input, Tabs, Textarea, and ScrollArea.
@@ -113,7 +118,7 @@ Feature spec 11 is committed on `development` as `70a72ba`. Only the CodeRabbit 
 
 ## In Progress (ONLY ONE AT A TIME!)
 
-- None — feature spec 11 is complete and verified; spec 12 is next.
+- None — the CodeRabbit PR #7 follow-up is committed as `768edef` and pushed to PR #7; awaiting the CodeRabbit re-review on the new commit.
 
 ## Open Questions
 
@@ -121,7 +126,14 @@ Feature spec 11 is committed on `development` as `70a72ba`. Only the CodeRabbit 
 
 ## Next Up (ONLY ONE AT A TIME!)
 
-- Spec 12 (shape panel) per the feature spec list, after spec 11 is implemented and verified.
+- Spec 13 per the feature spec list, after the PR #7 follow-up lands on `main`.
+
+## Verification Evidence (spec 12)
+
+- Test-quality gate applied for the residual issues documented in `context/current-issues.md`. The observed contract is that the toolbar rectangle icon is horizontal and every dragged shape preserves its shape through payload, node ID/data, and rendered geometry; checks covered all six shapes, malformed payload rejection, and cleanup of temporary Liveblocks nodes. No unit tests were added because the repository has no component test runner; the live localhost contract and required build are the acceptance evidence.
+- `npm run lint`, `npx tsc --noEmit`, `git diff --check`, and an isolated `npm run build` all pass. The isolated build completed in a disposable sibling copy with hardlinked dependencies, leaving the running service's `.next` directory untouched.
+- Live signed-in Chromium checks against `http://localhost:3005/editor/test-xylg4`: the pill toolbar SVG contains exactly one rounded `rect` with no divider/path; all six payloads matched their buttons and default sizes; new nodes had matching shape-based timestamp/counter IDs and styles; rendered geometry was `rect` for rectangle, `polygon` for diamond and hexagon, `circle` for circle, rounded `rect` for pill with `rx=20`/`ry=50` at 160×64, and cylinder `path`; the toolbar rectangle icon is `RectangleHorizontal` with a 20×12 SVG rectangle; an unknown `oval` payload was ignored without adding a node. A clean six-shape screenshot visually confirmed the geometry, and a fresh pill-only screenshot confirmed the dropped pill is a horizontal rounded rectangle with flat sections rather than an oval; after a six-second shared-state settle wait, the canvas returned to zero nodes.
+- `foster-ai-development.service` is active and serving the corrected feature on `localhost:3005`. No commit was created.
 
 ## Verification Evidence (spec 11)
 

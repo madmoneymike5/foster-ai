@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   LiveblocksProvider,
   RoomProvider,
@@ -20,9 +20,21 @@ import {
   ConnectionMode,
   MiniMap,
   ReactFlow,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 
-import type { CanvasEdge, CanvasNode } from "@/types/canvas";
+import { canvasNodeTypes } from "@/components/editor/canvas-node";
+import { ShapePanel } from "@/components/editor/shape-panel";
+import {
+  DEFAULT_NODE_COLOR,
+  SHAPE_DRAG_MIME,
+  SHAPE_SIZES,
+  parseShapeDragPayload,
+  type CanvasEdge,
+  type CanvasNode,
+  type CanvasNodeShape,
+  type ShapeDragPayload,
+} from "@/types/canvas";
 
 interface LiveCanvasProps {
   roomId: string;
@@ -126,26 +138,113 @@ function LiveFlowCanvas() {
     edges: { initial: [] },
     suspense: true,
   });
+  const flowInstanceRef =
+    useRef<ReactFlowInstance<CanvasNode, CanvasEdge> | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const addCanvasNode = useCallback(
+    (payload: ShapeDragPayload, position: { x: number; y: number }) => {
+      // RandomUUID so IDs stay unique across collaborators, not just within
+      // one browser session.
+      const id = crypto.randomUUID();
+      onNodesChange([
+        {
+          type: "add",
+          item: {
+            id,
+            type: "canvasNode",
+            position,
+            style: {
+              width: `${payload.width}px`,
+              height: `${payload.height}px`,
+            },
+            data: {
+              label: "",
+              color: DEFAULT_NODE_COLOR,
+              shape: payload.shape,
+            },
+          },
+        },
+      ]);
+    },
+    [onNodesChange],
+  );
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes(SHAPE_DRAG_MIME)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes(SHAPE_DRAG_MIME)) return;
+    event.preventDefault();
+
+    const payload = parseShapeDragPayload(
+      event.dataTransfer.getData(SHAPE_DRAG_MIME),
+    );
+    const instance = flowInstanceRef.current;
+    if (!payload || !instance) return;
+
+    const position = instance.screenToFlowPosition({
+      x: event.clientX,
+      y: event.clientY,
+    });
+    addCanvasNode(payload, position);
+  };
+
+  /** Creates a shape centered in the canvas from click/keyboard activation. */
+  const handleCreateShape = (shape: CanvasNodeShape) => {
+    const instance = flowInstanceRef.current;
+    const container = containerRef.current;
+    if (!instance || !container) return;
+
+    const size = SHAPE_SIZES[shape];
+    const rect = container.getBoundingClientRect();
+    // screenToFlowPosition returns the flow point under the container center;
+    // shift by half the node's size so the node itself is centered there.
+    // The size is in flow space, so this stays correct under any pan/zoom.
+    const center = instance.screenToFlowPosition({
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    });
+    addCanvasNode(size, {
+      x: center.x - size.width / 2,
+      y: center.y - size.height / 2,
+    });
+  };
 
   return (
-    <ReactFlow<CanvasNode, CanvasEdge>
-      className="bg-base"
-      colorMode="dark"
-      nodes={nodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
-      onDelete={onDelete}
-      connectionMode={ConnectionMode.Loose}
-      fitView
+    <div
+      className="relative h-full min-h-0 w-full"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      ref={containerRef}
     >
-      <MiniMap />
-      <Background
-        variant={BackgroundVariant.Dots}
-        color="var(--border-default)"
-      />
-    </ReactFlow>
+      <ReactFlow<CanvasNode, CanvasEdge>
+        className="bg-base"
+        colorMode="dark"
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={canvasNodeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onDelete={onDelete}
+        onInit={(instance) => {
+          flowInstanceRef.current = instance;
+        }}
+        connectionMode={ConnectionMode.Loose}
+        fitView
+      >
+        <MiniMap />
+        <Background
+          variant={BackgroundVariant.Dots}
+          color="var(--border-default)"
+        />
+      </ReactFlow>
+      <ShapePanel onCreate={handleCreateShape} />
+    </div>
   );
 }
 
