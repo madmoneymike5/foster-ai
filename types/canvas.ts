@@ -63,8 +63,8 @@ export const SHAPE_SIZES: Record<CanvasNodeShape, ShapeDragPayload> = {
  * Parses and validates a raw shape drag payload from a drop event.
  *
  * @param raw - The raw string read from the drop event's data transfer.
- * @returns The validated payload, or null when the payload is missing, not
- *   valid JSON, or not a known shape with positive dimensions.
+ * @returns The validated payload, or null when the payload is missing, invalid,
+ *   or contains dimensions outside the selected shape's usable bounds.
  */
 export function parseShapeDragPayload(raw: string): ShapeDragPayload | null {
   if (!raw) return null;
@@ -78,22 +78,25 @@ export function parseShapeDragPayload(raw: string): ShapeDragPayload | null {
 
   if (typeof parsed !== "object" || parsed === null) return null;
   const candidate = parsed as Partial<ShapeDragPayload>;
+  const shape = NODE_SHAPES.find((supportedShape) => supportedShape === candidate.shape);
+  if (!shape) return null;
+  const maxSize = SHAPE_SIZES[shape];
 
   if (
-    typeof candidate.shape !== "string" ||
-    !NODE_SHAPES.includes(candidate.shape as CanvasNodeShape) ||
     typeof candidate.width !== "number" ||
     typeof candidate.height !== "number" ||
     !Number.isFinite(candidate.width) ||
     !Number.isFinite(candidate.height) ||
     candidate.width <= 0 ||
-    candidate.height <= 0
+    candidate.height <= 0 ||
+    candidate.width > maxSize.width ||
+    candidate.height > maxSize.height
   ) {
     return null;
   }
 
   return {
-    shape: candidate.shape as CanvasNodeShape,
+    shape,
     width: candidate.width,
     height: candidate.height,
   };

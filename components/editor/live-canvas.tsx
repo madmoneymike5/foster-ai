@@ -155,23 +155,22 @@ function LiveFlowCanvas() {
   } | null>(null);
   const isDragging = dragPreview !== null;
 
-  // Follow the cursor while a shape is dragged, then clear the ghost when the
-  // drag ends (drop or cancel). `drag`/`dragend` fire on the drag source and
-  // bubble to the document, so this tracks the cursor across the whole canvas.
+  // Follow document-level pointer coordinates while dragging, then clear the
+  // ghost when the drag ends (drop or cancel).
   useEffect(() => {
     if (!isDragging) return;
 
-    const onDrag = (event: DragEvent) => {
+    const onDragOver = (event: DragEvent) => {
       setDragPreview((current) =>
         current ? { ...current, x: event.clientX, y: event.clientY } : current,
       );
     };
     const onDragEnd = () => setDragPreview(null);
 
-    document.addEventListener("drag", onDrag);
+    document.addEventListener("dragover", onDragOver);
     document.addEventListener("dragend", onDragEnd);
     return () => {
-      document.removeEventListener("drag", onDrag);
+      document.removeEventListener("dragover", onDragOver);
       document.removeEventListener("dragend", onDragEnd);
     };
   }, [isDragging]);

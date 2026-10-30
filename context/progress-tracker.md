@@ -4,17 +4,18 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase (ONLY ONE AT A TIME!)
 
-Feature spec 13 complete and verified — node shape rendering replaced (rectangle/pill/circle as CSS shapes, diamond/hexagon/cylinder as inline SVG that scales with node size) with subtle-at-rest / bright-when-selected borders, plus a cursor-anchored ghost preview while dragging a shape from the panel.
+Feature spec 13 review follow-up verified — drag previews track document-level `dragover` coordinates, and shape drag payloads reject dimensions above the selected shape's `SHAPE_SIZES` bounds.
 
 ## Current Goal (ONLY ONE AT A TIME!)
 
-Spec 13 is implemented and verified on `localhost:3005` but **uncommitted per Sarah's instruction** ("do not commit anything unless I say"); the five changed files (`components/editor/canvas-node.tsx`, `components/editor/live-canvas.tsx`, `components/editor/shape-panel.tsx`, `scripts/smoke/clerk-actors.mjs`, and this tracker) are in the working tree awaiting Sarah's go-ahead to commit.
+Spec 13 is implemented and its review follow-up is validated with ESLint, TypeScript, and focused shape-payload checks. The earlier drop behavior and canvas node creation remain unchanged.
 
 ## Completed
 
+- Fixed the spec 13 review findings: the drag preview follows document `dragover` coordinates and retains `dragend` cleanup; the shape payload parser now rejects nonpositive and over-limit dimensions using the selected shape's `SHAPE_SIZES` entry.
 - Implemented feature spec 13 (node shape + drag preview) on `development` (uncommitted per Sarah's instruction):
   - `components/editor/canvas-node.tsx` — replaced the all-SVG placeholder renderer: rectangle, pill, and circle now render as CSS shapes (`div` with `border-radius` `0.5rem`/`9999px`/`50%`); diamond, hexagon, and cylinder render as inline SVG in a `0 0 100 100` viewBox with `preserveAspectRatio="none"`, so the geometry stretches to the node's width/height (scales with node size). Borders are subtle at rest (`rgba(color, 0.45)`) and brighten to full color with a soft glow (CSS `box-shadow` / SVG `drop-shadow`) when the node is `selected`. Extracted a shared `ShapeSurface` and added an exported `ShapeDragPreview`: a `pointer-events-none fixed z-50` ghost anchored to the cursor's top-left (the same corner a dropped node lands on), scaled by the current canvas zoom, and rendered at 0.5 opacity. `CanvasNodeView` and `canvasNodeTypes` export names unchanged.
-  - `components/editor/live-canvas.tsx` — `LiveFlowCanvas` tracks the dragged shape + cursor position + zoom in a `dragPreview` state; while a drag is active it attaches `document`-level `drag`/`dragend` listeners to follow the cursor and clears the ghost on drop or cancel, renders `ShapeDragPreview`, and passes `onShapeDragStart` to the shape panel. React Flow retains `fitView` but caps its initial fit at zoom 1 so the first dropped node keeps the same on-screen size as its preview. Drop/create data behavior remains unchanged.
+  - `components/editor/live-canvas.tsx` — `LiveFlowCanvas` tracks the dragged shape + cursor position + zoom in a `dragPreview` state; while a drag is active it attaches document-level `dragover`/`dragend` listeners to follow the cursor and clears the ghost on drop or cancel, renders `ShapeDragPreview`, and passes `onShapeDragStart` to the shape panel. React Flow retains `fitView` but caps its initial fit at zoom 1 so the first dropped node keeps the same on-screen size as its preview. Drop/create data behavior remains unchanged.
   - `components/editor/shape-panel.tsx` — added a minimal `onShapeDragStart(shape, x, y)` prop called from the existing button `onDragStart`; uses a synchronously ready 1×1 transparent canvas to suppress the browser's native toolbar-button drag image; no change to the pill toolbar layout.
   - `scripts/smoke/clerk-actors.mjs` — increased the shared authenticated `/editor` navigation timeout to 90 seconds to tolerate the observed dev-machine memory pressure without affecting fast navigations.
   - Node rendering stays connected to the Liveblocks-synced canvas state (nodes/edges still flow through `useLiveblocksFlow`); only presentation and the drag preview changed.
