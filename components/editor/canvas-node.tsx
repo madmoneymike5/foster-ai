@@ -12,6 +12,7 @@ import {
 } from "react";
 import {
   NodeResizer,
+  NodeToolbar,
   type NodeProps,
   type NodeTypes,
   useKeyPress,
@@ -19,8 +20,10 @@ import {
 
 import {
   DEFAULT_NODE_COLOR,
+  NODE_COLORS,
   SHAPE_SIZES,
   type CanvasNode,
+  type CanvasNodeColorPair,
   type CanvasNodeShape,
 } from "@/types/canvas";
 
@@ -157,6 +160,54 @@ function ShapeSurface({
   );
 }
 
+interface ColorSwatchProps {
+  color: CanvasNodeColorPair;
+  active: boolean;
+  onSelect: (color: CanvasNodeColorPair) => void;
+}
+
+/**
+ * One color-pair swatch in the node color toolbar.
+ *
+ * Shows both colors of the pair (fill = background, border = text). Hovering
+ * adds a tight glow in the pair's text color; the active swatch gets a scaled,
+ * double ring so the current pair is unambiguous.
+ *
+ * @param props.color - The background/text pair this swatch applies.
+ * @param props.active - Whether the node currently uses this pair.
+ * @param props.onSelect - Called with the pair when the swatch is activated.
+ */
+function ColorSwatch({ color, active, onSelect }: ColorSwatchProps) {
+  const [hovered, setHovered] = useState(false);
+
+  // Composed so active ring and hover glow combine deterministically instead
+  // of fighting over one box-shadow through CSS variant ordering.
+  const shadows: string[] = [];
+  if (hovered) shadows.push(`0 0 5px 1px ${withAlpha(color.text, 0.7)}`);
+  if (active) {
+    shadows.push(`0 0 0 2px var(--bg-base)`, `0 0 0 3.5px ${color.text}`);
+  } else {
+    shadows.push(`inset 0 0 0 1px ${withAlpha(color.text, 0.35)}`);
+  }
+
+  return (
+    <button
+      aria-label={`Set node color: background ${color.background}, text ${color.text}`}
+      aria-pressed={active}
+      className="nodrag nopan nowheel h-4 w-4 cursor-pointer rounded-full transition-transform duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+      onClick={() => onSelect(color)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        backgroundColor: color.background,
+        boxShadow: shadows.join(", "),
+        transform: active ? "scale(1.15)" : undefined,
+      }}
+      type="button"
+    />
+  );
+}
+
 interface ShapeDragPreviewProps {
   shape: CanvasNodeShape;
   x: number;
@@ -225,6 +276,24 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
     },
     [id],
   );
+  const updateColor = useMutation(
+    ({ storage }, color: CanvasNodeColorPair) => {
+      const node = storage.get("flow")?.get("nodes").get(id);
+      const nodeColor = node?.get("data")?.get("color");
+      // Mutate the stored LiveObject's fields in place (not `set("color", …)`
+      // with a plain object) so background and text change together in one
+      // batched collaborative update.
+      if (nodeColor) {
+        nodeColor.set("background", color.background);
+        nodeColor.set("text", color.text);
+      }
+    },
+    [id],
+  );
+  // Liveblocks deep-copies storage values, so active comparison is by both
+  // fields, not object identity.
+  const isColorActive = (pair: CanvasNodeColorPair) =>
+    data.color.background === pair.background && data.color.text === pair.text;
 
   useEffect(() => {
     if (!isEditing) return;
@@ -232,17 +301,24 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
     textareaRef.current?.select();
   }, [isEditing]);
 
-  const startEditing = (event: MouseEvent<HTMLDivElement>) => {
+  const startEditing = (event: SyntheticEvent<HTMLDivElement>) => {
     event.stopPropagation();
     setDraftLabel(data.label);
     setIsEditing(true);
+  };
+  const handleLabelKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      startEditing(event);
+    }
   };
   const handleLabelChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const label = event.target.value;
     setDraftLabel(label);
     updateLabel(label);
   };
-  const handleLabelKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     event.stopPropagation();
     if (event.key === "Escape") {
       event.preventDefault();
@@ -305,6 +381,30 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
           opacity: 0.65,
         }}
       />
+      {/* NodeToolbar renders only when this node is the sole selected node and
+          keeps the swatches at a constant screen size above the node.
+          nodrag/nopan/nowheel plus stopped pointer, mouse, click, wheel, and
+          keyboard events keep toolbar use from dragging the node, panning the
+          canvas, or reaching React Flow's global key handlers. */}
+      <NodeToolbar
+        className="nodrag nopan nowheel flex items-center gap-1.5 rounded-full border border-surface-border bg-surface px-2 py-1.5 shadow-lg"
+        isVisible={selected}
+        onClick={stopCanvasInteraction}
+        onDoubleClick={stopCanvasInteraction}
+        onKeyDown={stopCanvasInteraction}
+        onPointerDown={stopCanvasInteraction}
+        onMouseDown={stopCanvasInteraction}
+        onWheel={stopCanvasInteraction}
+      >
+        {NODE_COLORS.map((pair) => (
+          <ColorSwatch
+            active={isColorActive(pair)}
+            color={pair}
+            key={pair.background}
+            onSelect={updateColor}
+          />
+        ))}
+      </NodeToolbar>
       {isEditing ? (
         <div
           className="nodrag nopan nowheel absolute inset-0 flex items-center justify-center px-3"
@@ -315,10 +415,10 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
         >
           <textarea
             aria-label="Node label"
-            className="nodrag nopan nowheel min-h-6 w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-center text-sm leading-6 outline-none placeholder:text-copy-faint focus:ring-0"
+            className="nodrag nopan nowheel min-h-6 max-h-full w-full resize-none overflow-y-auto border-0 bg-transparent p-0 text-center text-sm leading-6 outline-none placeholder:text-copy-faint [field-sizing:content] focus:ring-0"
             onBlur={() => setIsEditing(false)}
             onChange={handleLabelChange}
-            onKeyDown={handleLabelKeyDown}
+            onKeyDown={handleTextareaKeyDown}
             placeholder={EMPTY_LABEL_PLACEHOLDER}
             ref={textareaRef}
             rows={1}
@@ -329,12 +429,18 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
       ) : (
         <div
           className="absolute inset-0 flex items-center justify-center px-3 text-center"
+          role="button"
+          tabIndex={0}
           onDoubleClick={startEditing}
+          onKeyDown={handleLabelKeyDown}
+          aria-label="Edit node label"
           style={{
             color: data.label ? data.color.text : "var(--text-faint)",
           }}
         >
-          {data.label || EMPTY_LABEL_PLACEHOLDER}
+          <span className="min-w-0 max-w-full max-h-full overflow-hidden whitespace-pre-wrap [overflow-wrap:anywhere]">
+            {data.label || EMPTY_LABEL_PLACEHOLDER}
+          </span>
         </div>
       )}
     </div>

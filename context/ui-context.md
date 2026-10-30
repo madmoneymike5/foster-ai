@@ -60,7 +60,7 @@ Radius increases with surface depth — smaller for inner elements, larger for o
 | `#2E1938` | `#BF7AF0`  | Purple                 |
 | `#331B00` | `#FF990A`  | Orange                 |
 | `#3C1618` | `#FF6166`  | Red                    |
-| `#3A1726` | `#F75F8F`  | Pink                   |
+| `#2E2600` | `#FFD60A`  | Yellow                 |
 | `#0F2E18` | `#62C073`  | Green                  |
 | `#062822` | `#0AC7B4`  | Teal                   |
 

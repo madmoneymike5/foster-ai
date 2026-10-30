@@ -4,17 +4,24 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase (ONLY ONE AT A TIME!)
 
-Feature spec 14 (node editing) and its Ctrl-held proportional-resize follow-up are implemented and verified; shape rendering, drop behavior, and collaborative state remain unchanged.
+Feature spec 15 (node color toolbar) is implemented and verified on localhost:3005: a floating 8-swatch toolbar appears above the sole selected node and updates the node's paired background/text color through collaborative canvas state.
 
 ## Current Goal (ONLY ONE AT A TIME!)
 
-Keep the verified spec 14 implementation uncommitted pending Sarah's instruction; the next feature is spec 15.
+Keep the verified spec 15 implementation uncommitted pending Sarah's commit instruction.
 
 ## Completed
 
+- Fixed the spec 14 keyboard-accessibility review finding: the display label can receive keyboard focus and starts editing on Enter or Space, while retaining double-click activation.
+- Implemented feature spec 15 (node color toolbar) on `development` (uncommitted per Sarah's instruction):
+  - `components/editor/canvas-node.tsx` — added `ColorSwatch` and a React Flow `NodeToolbar` (constant screen size, default 10px offset above the node) rendered by the node renderer with `isVisible={selected}`, so the toolbar shows exactly when its node is selected — including each node in a multi-selection, per the spec's "only show it when the node is selected". One swatch per `NODE_COLORS` pair (8 total) shows both colors of the pair (fill = background, inset border = text); the active swatch gets a scaled double ring in its text color, and hovering any swatch adds a tight glow in that pair's text color (composed in one deterministic `box-shadow` instead of fighting CSS variant ordering). `nodrag nopan nowheel` plus stopped pointer/mouse/click/double-click/wheel/keyboard propagation keep toolbar use from dragging the node, panning the canvas, deselecting, or reaching React Flow's global key handlers. A Liveblocks `useMutation` mutates the stored color LiveObject's `background`/`text` fields in place so both colors change together in one batched collaborative update; active comparison is by both fields because Liveblocks deep-copies storage values. Label editing, resize controls, and shape rendering are unchanged.
+  - `types/canvas.ts` — `CanvasNodeData.color` widened from the literal `NODE_COLORS` pair union to the `CanvasNodeColor` string-pair interface: Liveblocks storage types wrap object fields as `LiveObject`s, where literal-union field types no longer type-check for `set`. `NODE_COLORS`/`CanvasNodeColorPair` remain the authoritative palette.
+  - Temporary signed-in Playwright smoke runner (on the shared `clerk-actors.mjs` helper) verified the feature and was removed after passing; it is not part of this change.
 - Implemented feature spec 14 (node editing) on `development` (uncommitted per Sarah's instruction):
   - `components/editor/canvas-node.tsx` — selected nodes render subtle React Flow `NodeResizer` controls with `80×48` minimum dimensions; inline label editing uses a centered placeholder (`Label`), a centered textarea overlay, live Liveblocks label mutations, blur/Escape close behavior, and `nodrag`/`nopan`/`nowheel` interaction isolation. Existing shape geometry and drag-preview rendering are unchanged.
 - Completed the spec 14 proportional-resize follow-up on `development` (uncommitted per Sarah's instruction): `NodeResizer` keeps the starting aspect ratio while Ctrl is held; a node capture-phase shim only changes `ctrlKey` for resize-handle mousedown events so d3-drag's native Ctrl filter accepts the gesture, while the handle click remains isolated from node selection. Ordinary freeform resizing and non-resize node interactions remain unchanged.
+- Completed the spec 14 multiline-label rendering correction on `development` (uncommitted per Sarah's instruction): non-editing labels now preserve newline characters with `whitespace-pre-wrap`, wrap long unbroken tokens with `overflow-wrap: anywhere`, and clip overflow inside the node; editing and Liveblocks update behavior are unchanged.
+- Completed the spec 14 multiline-editing viewport correction on `development` (uncommitted per Sarah's instruction): the textarea now uses intrinsic content sizing with a node-bounded vertical scroll area, so multiple current lines remain visible while editing instead of being constrained to one row.
 - Fixed the spec 13 review findings: the drag preview follows document `dragover` coordinates and retains `dragend` cleanup; the shape payload parser now rejects nonpositive and over-limit dimensions using the selected shape's `SHAPE_SIZES` entry.
 - Implemented feature spec 13 (node shape + drag preview) on `development` (uncommitted per Sarah's instruction):
   - `components/editor/canvas-node.tsx` — replaced the all-SVG placeholder renderer: rectangle, pill, and circle now render as CSS shapes (`div` with `border-radius` `0.5rem`/`9999px`/`50%`); diamond, hexagon, and cylinder render as inline SVG in a `0 0 100 100` viewBox with `preserveAspectRatio="none"`, so the geometry stretches to the node's width/height (scales with node size). Borders are subtle at rest (`rgba(color, 0.45)`) and brighten to full color with a soft glow (CSS `box-shadow` / SVG `drop-shadow`) when the node is `selected`. Extracted a shared `ShapeSurface` and added an exported `ShapeDragPreview`: a `pointer-events-none fixed z-50` ghost anchored to the cursor's top-left (the same corner a dropped node lands on), scaled by the current canvas zoom, and rendered at 0.5 opacity. `CanvasNodeView` and `canvasNodeTypes` export names unchanged.
@@ -128,7 +135,7 @@ Keep the verified spec 14 implementation uncommitted pending Sarah's instruction
 
 ## In Progress (ONLY ONE AT A TIME!)
 
-- No implementation is currently in progress; spec 14's proportional-resize follow-up is complete and verified.
+- No implementation is currently in progress; spec 15 is complete and verified.
 
 ## Open Questions
 
@@ -136,7 +143,37 @@ Keep the verified spec 14 implementation uncommitted pending Sarah's instruction
 
 ## Next Up (ONLY ONE AT A TIME!)
 
-- Spec 15 (node color toolbar) per the feature spec list, after Sarah's commit instruction.
+- Spec 16 (node color toolbar): `context/feature-specs/16-nodes-color-toolbar.md` is byte-identical to spec 15 (verified with `diff`); it appears to duplicate the just-completed unit, so confirm with Sarah whether 16 is intentional separate work or a duplicate before starting anything.
+
+## Verification Evidence (spec 15)
+
+- Test-quality gate applied before verification. No automated unit tests added (no component test runner in the repo); the kept live checks in the temporary signed-in Playwright runner protected the observable contracts: C1 toolbar absent unselected / present above node with no overlap, C2 eight swatches, C3 active state tracks the node's pair, C4 both background and label text colors update on swatch click, C5 node position/viewport/selection stable through toolbar use, C6 second room tab observes the change, C7 label editing still works, C8 hover glow derives from the swatch's text color, C9 every node in a multi-selection shows a toolbar and deselecting all removes them. Rejected: `withAlpha` unit test (self-verification of a pure helper), per-swatch identity checks beyond C3 (sprawl), drag-and-drop regression check (untouched path).
+- Temporary runner removed after the final pass (per the spec 12/13 temporary-runner pattern); its C1–C9 mapping is documented in this section, not in the tree.
+- `npm run lint`, `npx tsc --noEmit`, `git diff --check`, and changed-file LSP diagnostics all pass; isolated `npm run build` (hardlinked sibling copy, disposable, removed after) passed with all routes both before and after the final `isVisible={selected}` change, leaving the running service's `.next` untouched.
+- Temporary smoke against `http://localhost:3005`: **17/17 checks passed** on the final code — toolbar gap measured exactly 10px above the node with no overlap; 8 swatches; default pair active on a fresh node; blue swatch click moved the surface background to `rgb(16, 35, 61)`, the label to `rgb(82, 168, 255)`, and the `aria-pressed` state to the clicked swatch; node transform and viewport transform identical before/after with the node still selected; hover glow computed as `rgba(82, 168, 255, 0.7) 0px 0px 5px 1px`; a two-node Control-click multi-selection rendered two toolbars and a pane click removed both; a second tab in the same room observed the synced background; label edit (`Spec15` + Escape) worked in the recolored node.
+- React Flow v12 harness findings that shaped the verification: click-to-add-selection uses `multiSelectionKeyCode` (Control on non-Mac), not Shift; `elevateNodesOnSelect` re-stacks the selected node on top; pane clicks reset selection (background clicks must land inside the `.react-flow` pane — the top 48px strip is the navbar).
+- Cleanup verified: fixture project deleted through the app API (status 200, gone from the owner list; project deletion removes the Liveblocks room), `0` `spec15-smoke-*` `Project` rows, and `0` temporary Clerk users/organizations. Earlier harness-bug reruns left orphan fixture projects that were removed directly (DB + room) before the final run; the final runner's `finally` block deletes the project (app API with direct DB + Liveblocks fallback) even on fatal failure. No credentials or session values were written to the repository.
+- No commit was created.
+ 
+## Verification Evidence (spec 15 palette refinement)
+ 
+- Sarah's screenshot of the rendered toolbar showed the sixth pair (dark maroon `#3A1726` with rose text `#F75F8F`) reading as near-identical to the red pair next to it. The sixth `NODE_COLORS` entry was replaced with a bright yellow pair, `#2E2600` fill with `#FFD60A` text, keeping the palette convention of a dark same-hue fill plus vivid text. `context/ui-context.md`'s palette table row was updated to match (Yellow).
+- No migration of already-saved nodes: nodes that stored the old pink pair keep rendering it from their stored colors; no swatch matches them as active until the user picks a current palette pair. This request changed only the predefined palette.
+- No new tests or smoke runners: the swatch-to-`NODE_COLORS` rendering path was already proven by the 17/17 spec 15 live run; only the sixth entry's data changed. `npm run lint`, `npx tsc --noEmit`, and `git diff --check` all pass; only `types/canvas.ts` and `context/ui-context.md` changed for this refinement.
+- No commit was created.
+ 
+## Verification Evidence (spec 14 multiline-editing viewport correction)
+
+- Live signed-in check against `http://localhost:3005/editor/test-xylg4`: while editing a two-line label, the textarea retained the newline, computed `field-sizing: content`, used `overflow-y: auto`, and expanded beyond the previous one-row viewport; the test node was restored to its original empty label afterward.
+- `npm run lint`, `npx tsc --noEmit`, isolated `npm run build`, `git diff --check`, and changed-file LSP diagnostics passed.
+- No commit was created.
+
+## Verification Evidence (spec 14 multiline-label correction)
+
+- Test-quality gate applied. No automated tests were added because the repository has no component test runner; the live checks protect the actual user-facing contracts: Enter and Shift+Enter newline rendering, reopen preservation, long-token wrapping, and collaborative label sync.
+- Live signed-in checks against `http://localhost:3005/editor/test-xylg4`: Enter and Shift+Enter both produced visible two-line labels after blur; reopening the editor retained the exact newline value; a 90-character unbroken label stayed within the node's horizontal and vertical bounds; and a second signed-in tab observed the synced multiline label. The final console check reported no new messages after clearing historical development logs.
+- `npm run lint`, `npx tsc --noEmit`, isolated `npm run build`, `git diff --check`, and changed-file LSP diagnostics passed.
+- No commit was created.
 
 ## Verification Evidence (spec 14 proportional resize follow-up)
 

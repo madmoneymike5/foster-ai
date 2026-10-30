@@ -13,7 +13,7 @@ export const NODE_COLORS = [
   { background: "#2E1938", text: "#BF7AF0" },
   { background: "#331B00", text: "#FF990A" },
   { background: "#3C1618", text: "#FF6166" },
-  { background: "#3A1726", text: "#F75F8F" },
+  { background: "#2E2600", text: "#FFD60A" },
   { background: "#0F2E18", text: "#62C073" },
   { background: "#062822", text: "#0AC7B4" },
 ] as const satisfies readonly CanvasNodeColor[];
@@ -105,7 +105,13 @@ export function parseShapeDragPayload(raw: string): ShapeDragPayload | null {
 /** Shared, serializable data stored on each architecture canvas node. */
 export interface CanvasNodeData extends Record<string, unknown> {
   label: string;
-  color: CanvasNodeColorPair;
+  /**
+   * The node's active background/text pair. Typed as the string-pair
+   * interface rather than the literal `NODE_COLORS` union because Liveblocks
+   * storage types wrap object fields as `LiveObject`s, where literal-union
+   * field types no longer type-check.
+   */
+  color: CanvasNodeColor;
   shape: CanvasNodeShape;
 }
 
