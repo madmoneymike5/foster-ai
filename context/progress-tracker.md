@@ -4,14 +4,17 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase (ONLY ONE AT A TIME!)
 
-Feature spec 13 review follow-up verified — drag previews track document-level `dragover` coordinates, and shape drag payloads reject dimensions above the selected shape's `SHAPE_SIZES` bounds.
+Feature spec 14 (node editing) and its Ctrl-held proportional-resize follow-up are implemented and verified; shape rendering, drop behavior, and collaborative state remain unchanged.
 
 ## Current Goal (ONLY ONE AT A TIME!)
 
-Spec 13 is implemented and its review follow-up is validated with ESLint, TypeScript, and focused shape-payload checks. The earlier drop behavior and canvas node creation remain unchanged.
+Keep the verified spec 14 implementation uncommitted pending Sarah's instruction; the next feature is spec 15.
 
 ## Completed
 
+- Implemented feature spec 14 (node editing) on `development` (uncommitted per Sarah's instruction):
+  - `components/editor/canvas-node.tsx` — selected nodes render subtle React Flow `NodeResizer` controls with `80×48` minimum dimensions; inline label editing uses a centered placeholder (`Label`), a centered textarea overlay, live Liveblocks label mutations, blur/Escape close behavior, and `nodrag`/`nopan`/`nowheel` interaction isolation. Existing shape geometry and drag-preview rendering are unchanged.
+- Completed the spec 14 proportional-resize follow-up on `development` (uncommitted per Sarah's instruction): `NodeResizer` keeps the starting aspect ratio while Ctrl is held; a node capture-phase shim only changes `ctrlKey` for resize-handle mousedown events so d3-drag's native Ctrl filter accepts the gesture, while the handle click remains isolated from node selection. Ordinary freeform resizing and non-resize node interactions remain unchanged.
 - Fixed the spec 13 review findings: the drag preview follows document `dragover` coordinates and retains `dragend` cleanup; the shape payload parser now rejects nonpositive and over-limit dimensions using the selected shape's `SHAPE_SIZES` entry.
 - Implemented feature spec 13 (node shape + drag preview) on `development` (uncommitted per Sarah's instruction):
   - `components/editor/canvas-node.tsx` — replaced the all-SVG placeholder renderer: rectangle, pill, and circle now render as CSS shapes (`div` with `border-radius` `0.5rem`/`9999px`/`50%`); diamond, hexagon, and cylinder render as inline SVG in a `0 0 100 100` viewBox with `preserveAspectRatio="none"`, so the geometry stretches to the node's width/height (scales with node size). Borders are subtle at rest (`rgba(color, 0.45)`) and brighten to full color with a soft glow (CSS `box-shadow` / SVG `drop-shadow`) when the node is `selected`. Extracted a shared `ShapeSurface` and added an exported `ShapeDragPreview`: a `pointer-events-none fixed z-50` ghost anchored to the cursor's top-left (the same corner a dropped node lands on), scaled by the current canvas zoom, and rendered at 0.5 opacity. `CanvasNodeView` and `canvasNodeTypes` export names unchanged.
@@ -125,7 +128,7 @@ Spec 13 is implemented and its review follow-up is validated with ESLint, TypeSc
 
 ## In Progress (ONLY ONE AT A TIME!)
 
-- None — spec 13 is implemented and verified; the changes are uncommitted in the `development` worktree pending Sarah's commit instruction.
+- No implementation is currently in progress; spec 14's proportional-resize follow-up is complete and verified.
 
 ## Open Questions
 
@@ -133,7 +136,23 @@ Spec 13 is implemented and its review follow-up is validated with ESLint, TypeSc
 
 ## Next Up (ONLY ONE AT A TIME!)
 
-- Spec 14 (node-editing) per the feature spec list, once spec 13 is committed.
+- Spec 15 (node color toolbar) per the feature spec list, after Sarah's commit instruction.
+
+## Verification Evidence (spec 14 proportional resize follow-up)
+
+- Test-quality gate applied. No automated tests were added because the repository has no component test runner; the live checks protect the actual user-facing contracts: Ctrl-held proportional resizing, ordinary freeform resizing, selection preservation, and the existing node-editing behavior.
+- `npm run lint`, `npx tsc --noEmit`, isolated `npm run build`, and `git diff --check` all pass.
+- Live signed-in check against `http://localhost:3005/editor/spec14-ratio-43a0e845`: a selected `300×200` node resized with Ctrl held to `200×133.333` while preserving the `1.5` starting ratio and remaining selected; a subsequent unmodified resize changed the ratio to approximately `1.636`, confirming freeform behavior remains available. Browser console output was clean after the final code reload.
+- The temporary proportional-resize project was deleted, its browser tab was closed, the development service remains active on `localhost:3005`, and no commit was created.
+
+## Verification Evidence (spec 14)
+
+- Test-quality gate applied. No automated tests were added because the repository has no component test runner; the live interaction checks protect the actual user-facing contracts: selected resize controls, minimum-size enforcement, collaborative dimension/label updates, placeholder/edit lifecycle, and canvas interaction isolation.
+- `npm run lint`, `npx tsc --noEmit`, isolated `npm run build` in a disposable hardlinked sibling, and `git diff --check` all pass.
+- Live signed-in checks against `http://localhost:3005/editor/test-xylg4`: selected nodes rendered eight React Flow resize controls; dragging below the minimum clamped the node to `80×48`, and the node was restored to its original `180×100` dimensions afterward; double-clicking the centered label opened `textarea[aria-label="Node label"]`; typing `API Gateway` updated the node, the second room tab observed the synced label and dimensions, and the label was restored to empty; both blur and Escape closed editing; the node ended with the `Label` placeholder and no active textarea.
+- Text editing uses `nodrag`, `nopan`, and `nowheel` plus stopped pointer/mouse/click/keyboard propagation; a real pointer drag from the active textarea left the node position and canvas viewport transform unchanged, and Escape closed editing. The second verification tab was closed after the collaboration check.
+- The development service is active and serving `localhost:3005`; signed-out route probing still returns the expected `307` Clerk redirect. Browser console output contained only Fast Refresh messages and no errors.
+- No commit was created.
 
 ## Verification Evidence (spec 13)
 

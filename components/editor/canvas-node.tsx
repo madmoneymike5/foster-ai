@@ -1,6 +1,21 @@
 "use client";
 
-import { type NodeProps, type NodeTypes } from "@xyflow/react";
+import { useMutation } from "@liveblocks/react";
+import {
+  type ChangeEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+  type SyntheticEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  NodeResizer,
+  type NodeProps,
+  type NodeTypes,
+  useKeyPress,
+} from "@xyflow/react";
 
 import {
   DEFAULT_NODE_COLOR,
@@ -10,6 +25,9 @@ import {
 } from "@/types/canvas";
 
 const SVG_SHAPE_STROKE = 2;
+const MIN_NODE_WIDTH = 80;
+const MIN_NODE_HEIGHT = 48;
+const EMPTY_LABEL_PLACEHOLDER = "Label";
 
 /**
  * Convert a `#rrggbb` node color into a translucent `rgba()` variant so node
@@ -194,21 +212,131 @@ export function ShapeDragPreview({
  *
  * @param props - The React Flow node props for a `canvasNode` node.
  */
-export function CanvasNodeView({ data, selected }: NodeProps<CanvasNode>) {
+export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
+  const [isEditing, setIsEditing] = useState(false);
+  const controlPressed = useKeyPress("Control", { preventDefault: false });
+  const [draftLabel, setDraftLabel] = useState(data.label);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const updateLabel = useMutation(
+    ({ storage }, label: string) => {
+      const node = storage.get("flow")?.get("nodes").get(id);
+      const nodeData = node?.get("data");
+      if (nodeData) nodeData.set("label", label);
+    },
+    [id],
+  );
+
+  useEffect(() => {
+    if (!isEditing) return;
+    textareaRef.current?.focus();
+    textareaRef.current?.select();
+  }, [isEditing]);
+
+  const startEditing = (event: MouseEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    setDraftLabel(data.label);
+    setIsEditing(true);
+  };
+  const handleLabelChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    const label = event.target.value;
+    setDraftLabel(label);
+    updateLabel(label);
+  };
+  const handleLabelKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    event.stopPropagation();
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setIsEditing(false);
+    }
+  };
+  const stopCanvasInteraction = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
+  const allowControlResize = (event: MouseEvent<HTMLDivElement>) => {
+    if (
+      !event.ctrlKey ||
+      !(event.target instanceof Element) ||
+      !event.target.closest(".react-flow__resize-control")
+    ) {
+      return;
+    }
+
+    // d3-drag rejects Ctrl+mousedown; keepAspectRatio already owns the modifier state.
+    Object.defineProperty(event.nativeEvent, "ctrlKey", {
+      configurable: true,
+      value: false,
+    });
+  };
+  const stopResizeSelection = (event: SyntheticEvent<HTMLDivElement>) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest(".react-flow__resize-control")
+    ) {
+      event.stopPropagation();
+    }
+  };
+
   return (
-    <div className="relative h-full w-full text-sm">
+    <div
+      className="relative h-full w-full text-sm"
+      onClick={stopResizeSelection}
+      onMouseDownCapture={allowControlResize}
+    >
       <ShapeSurface
         background={data.color.background}
         color={data.color.text}
         selected={selected}
         shape={data.shape}
       />
-      <div
-        className="absolute inset-0 flex items-center justify-center px-3 text-center"
-        style={{ color: data.color.text }}
-      >
-        {data.label}
-      </div>
+      <NodeResizer
+        isVisible={selected}
+        minWidth={MIN_NODE_WIDTH}
+        minHeight={MIN_NODE_HEIGHT}
+        keepAspectRatio={controlPressed}
+        handleStyle={{
+          width: 8,
+          height: 8,
+          border: "1px solid var(--border-subtle)",
+          borderRadius: "2px",
+          backgroundColor: "var(--bg-elevated)",
+        }}
+        lineStyle={{
+          borderColor: "var(--border-subtle)",
+          opacity: 0.65,
+        }}
+      />
+      {isEditing ? (
+        <div
+          className="nodrag nopan nowheel absolute inset-0 flex items-center justify-center px-3"
+          onClick={stopCanvasInteraction}
+          onDoubleClick={stopCanvasInteraction}
+          onMouseDown={stopCanvasInteraction}
+          onPointerDown={stopCanvasInteraction}
+        >
+          <textarea
+            aria-label="Node label"
+            className="nodrag nopan nowheel min-h-6 w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-center text-sm leading-6 outline-none placeholder:text-copy-faint focus:ring-0"
+            onBlur={() => setIsEditing(false)}
+            onChange={handleLabelChange}
+            onKeyDown={handleLabelKeyDown}
+            placeholder={EMPTY_LABEL_PLACEHOLDER}
+            ref={textareaRef}
+            rows={1}
+            value={draftLabel}
+            style={{ color: data.color.text }}
+          />
+        </div>
+      ) : (
+        <div
+          className="absolute inset-0 flex items-center justify-center px-3 text-center"
+          onDoubleClick={startEditing}
+          style={{
+            color: data.label ? data.color.text : "var(--text-faint)",
+          }}
+        >
+          {data.label || EMPTY_LABEL_PLACEHOLDER}
+        </div>
+      )}
     </div>
   );
 }
