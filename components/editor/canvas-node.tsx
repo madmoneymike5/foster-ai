@@ -11,11 +11,14 @@ import {
   useState,
 } from "react";
 import {
+  Handle,
   NodeResizer,
   NodeToolbar,
+  Position,
   type NodeProps,
   type NodeTypes,
   useKeyPress,
+  useStoreApi,
 } from "@xyflow/react";
 
 import {
@@ -31,6 +34,18 @@ const SVG_SHAPE_STROKE = 2;
 const MIN_NODE_WIDTH = 80;
 const MIN_NODE_HEIGHT = 48;
 const EMPTY_LABEL_PLACEHOLDER = "Label";
+
+/**
+ * The four connection handles around every node. All use the `source` type:
+ * the canvas runs in `ConnectionMode.Loose`, so any handle can start a
+ * connection and any same-typed handle on another node can end it.
+ */
+const CONNECTION_HANDLES = [
+  { id: "top", position: Position.Top },
+  { id: "right", position: Position.Right },
+  { id: "bottom", position: Position.Bottom },
+  { id: "left", position: Position.Left },
+] as const;
 
 /**
  * Convert a `#rrggbb` node color into a translucent `rgba()` variant so node
@@ -266,7 +281,9 @@ export function ShapeDragPreview({
 export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
   const [isEditing, setIsEditing] = useState(false);
   const controlPressed = useKeyPress("Control", { preventDefault: false });
+  const store = useStoreApi();
   const [draftLabel, setDraftLabel] = useState(data.label);
+  const nodeElementRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const updateLabel = useMutation(
     ({ storage }, label: string) => {
@@ -294,6 +311,29 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
   // fields, not object identity.
   const isColorActive = (pair: CanvasNodeColorPair) =>
     data.color.background === pair.background && data.color.text === pair.text;
+
+  // Liveblocks can hydrate a node after React Flow's initial empty mount. The
+  // node's own effect runs after its handles exist, which is the safe point to
+  // populate React Flow's measured dimensions and handle bounds for edges.
+  useEffect(() => {
+    let disposed = false;
+    queueMicrotask(() => {
+      if (disposed) return;
+
+      const { updateNodeInternals } = store.getState();
+      const nodeElement = nodeElementRef.current;
+      if (!nodeElement) return;
+
+      updateNodeInternals(
+        new Map([[id, { id, nodeElement, force: true }]]),
+        { triggerFitView: false },
+      );
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [id, store]);
 
   useEffect(() => {
     if (!isEditing) return;
@@ -354,8 +394,9 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
 
   return (
     <div
-      className="relative h-full w-full text-sm"
+      className="group relative h-full w-full text-sm"
       onClick={stopResizeSelection}
+      ref={nodeElementRef}
       onMouseDownCapture={allowControlResize}
     >
       <ShapeSurface
@@ -364,6 +405,23 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
         selected={selected}
         shape={data.shape}
       />
+      {/* Connection handles: hidden until the node is hovered (group-hover
+          fades them in). Rendered before NodeResizer so that on a selected
+          node the resize controls sit above the dots they share edge
+          midpoints with, keeping spec 14's eight resize grips fully usable. */}
+      {CONNECTION_HANDLES.map(({ id: handleId, position }) => (
+        <Handle
+          className="nodrag h-2 w-2 rounded-full opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+          id={handleId}
+          key={handleId}
+          position={position}
+          style={{
+            backgroundColor: "var(--text-primary)",
+            border: "1.5px solid var(--bg-base)",
+          }}
+          type="source"
+        />
+      ))}
       <NodeResizer
         isVisible={selected}
         minWidth={MIN_NODE_WIDTH}

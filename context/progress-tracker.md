@@ -4,14 +4,22 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase (ONLY ONE AT A TIME!)
 
-Feature spec 15 (node color toolbar) is implemented and verified on localhost:3005: a floating 8-swatch toolbar appears above the sole selected node and updates the node's paired background/text color through collaborative canvas state.
+Spec 16 edge behavior is complete; review follow-up updates the one-shot initial fit to wait for hydrated room storage and only fit nodes present when the room loaded.
 
 ## Current Goal (ONLY ONE AT A TIME!)
 
-Keep the verified spec 15 implementation uncommitted pending Sarah's commit instruction.
+No active implementation goal. Spec 16 C10 is resolved and the complete feature remains uncommitted pending Sarah's commit instruction.
 
 ## Completed
 
+- Fixed the canvas initial-fit review finding: fitting waits for Liveblocks storage hydration, fits nodes present in the hydrated room once initialized, and does not fit the first node added to a hydrated empty room. Verified with lint, TypeScript, and a production build.
+- Implemented feature spec 16 (edge behavior) on `development` (uncommitted per Sarah's instruction):
+  - `components/editor/canvas-edge.tsx` (new) — `CanvasEdgeView`: `getSmoothStepPath` with `borderRadius 0` (pure right-angle routing), a 24px transparent hit path (`pointerEvents: stroke`) under a 2px visible path (`var(--edge-default)` stroke, round linecap, explicit arrow `markerEnd`), group opacity dimmed at rest and bright on hover/selection, and an `EdgeLabelRenderer` at the computed path midpoint: double-click opens a draft label input (auto-focused, existing text selected), blur/Enter/Escape all commit through a Liveblocks `useMutation` on the edge's `data` LiveObject, saved labels render as pill badges, unlabeled active edges show a faint `Add label` hint, and `nodrag`/`nopan`/`nowheel` plus stopped event propagation keep label interactions from moving or panning the canvas. `CanvasEdgeArrowMarker` is a hidden fixed-id SVG `<defs>` element (`foster-canvas-edge-arrow`, `userSpaceOnUse`, filled triangle) rendered as a sibling of `ReactFlow` so every edge's `url(#foster-canvas-edge-arrow)` reference resolves regardless of pane transform.
+  - `components/editor/canvas-node.tsx` — four `ConnectionHandle`s (top/right/bottom/left, all `type="source"`, bidirectional under the existing `ConnectionMode.Loose`) as 8px dots with `opacity-0` → `group-hover:opacity-100` fade (150ms), rendered before `NodeResizer` so the resizer squares paint above the dots on a selected node (accepted tradeoff: deselect before connecting from an edge midpoint).
+  - `components/editor/live-canvas.tsx` — `edgeTypes` registration, `defaultEdgeOptions` (`type: "canvasEdge"`, `data: { label: "" }`), `connectionLineType={ConnectionLineType.SmoothStep}`, `HydratedFlowFit`'s one-shot zero-duration fit after non-empty nodes and initialized viewport, and `CanvasEdgeArrowMarker` rendered before `ReactFlow`.
+  - `app/globals.css` — `--edge-default: #f8fafc` in `:root` plus the `--color-edge-default` theme mapping.
+  - `components/editor/canvas-node.tsx` — node-local post-commit React Flow internal measurement via `useStoreApi` and `queueMicrotask`, ensuring hydrated custom handles populate `measured` dimensions and `handleBounds` before edge geometry resolves.
+  - Interactive Chrome verification on `localhost:3005/editor/test-xylg4` confirmed all in-canvas behavior, including C10 second-tab edge and label collaboration (see Verification Evidence).
 - Fixed the spec 14 keyboard-accessibility review finding: the display label can receive keyboard focus and starts editing on Enter or Space, while retaining double-click activation.
 - Implemented feature spec 15 (node color toolbar) on `development` (uncommitted per Sarah's instruction):
   - `components/editor/canvas-node.tsx` — added `ColorSwatch` and a React Flow `NodeToolbar` (constant screen size, default 10px offset above the node) rendered by the node renderer with `isVisible={selected}`, so the toolbar shows exactly when its node is selected — including each node in a multi-selection, per the spec's "only show it when the node is selected". One swatch per `NODE_COLORS` pair (8 total) shows both colors of the pair (fill = background, inset border = text); the active swatch gets a scaled double ring in its text color, and hovering any swatch adds a tight glow in that pair's text color (composed in one deterministic `box-shadow` instead of fighting CSS variant ordering). `nodrag nopan nowheel` plus stopped pointer/mouse/click/double-click/wheel/keyboard propagation keep toolbar use from dragging the node, panning the canvas, deselecting, or reaching React Flow's global key handlers. A Liveblocks `useMutation` mutates the stored color LiveObject's `background`/`text` fields in place so both colors change together in one batched collaborative update; active comparison is by both fields because Liveblocks deep-copies storage values. Label editing, resize controls, and shape rendering are unchanged.
@@ -135,7 +143,7 @@ Keep the verified spec 15 implementation uncommitted pending Sarah's commit inst
 
 ## In Progress (ONLY ONE AT A TIME!)
 
-- No implementation is currently in progress; spec 15 is complete and verified.
+- None. Spec 16 C10 is resolved: a synchronized fresh tab now measures hydrated custom-node handles and renders the existing edges; new edges and labels propagate through the shared room.
 
 ## Open Questions
 
@@ -143,7 +151,7 @@ Keep the verified spec 15 implementation uncommitted pending Sarah's commit inst
 
 ## Next Up (ONLY ONE AT A TIME!)
 
-- Spec 16 (node color toolbar): `context/feature-specs/16-nodes-color-toolbar.md` is byte-identical to spec 15 (verified with `diff`); it appears to duplicate the just-completed unit, so confirm with Sarah whether 16 is intentional separate work or a duplicate before starting anything.
+- Nothing queued. Spec 16 is complete; `16-nodes-color-toolbar.md` remains a byte-identical duplicate of spec 15 and is ignored; the real spec 16 is `16-edge-behavior.md`.
 
 ## Verification Evidence (spec 15)
 
@@ -155,6 +163,15 @@ Keep the verified spec 15 implementation uncommitted pending Sarah's commit inst
 - Cleanup verified: fixture project deleted through the app API (status 200, gone from the owner list; project deletion removes the Liveblocks room), `0` `spec15-smoke-*` `Project` rows, and `0` temporary Clerk users/organizations. Earlier harness-bug reruns left orphan fixture projects that were removed directly (DB + room) before the final run; the final runner's `finally` block deletes the project (app API with direct DB + Liveblocks fallback) even on fatal failure. No credentials or session values were written to the repository.
 - No commit was created.
  
+## Verification Evidence (spec 16)
+
+- Test-quality gate applied. No automated tests added (no component test runner in the repo); the kept evidence is the isolated production build plus live, signed-in Chrome checks on `localhost:3005`. Sarah chose interactive Chrome verification over a temporary Playwright script; the earlier draft runner `scripts/smoke/spec16.mjs` was deleted as unrequested (per the established temporary-runner pattern).
+- `npm run lint`, `npx tsc --noEmit`, `git diff --check`, changed-file LSP diagnostics (only pre-existing Tailwind at-rule warnings and ast-grep style hints), and an isolated production build (hardlinked sibling `build-spec16-c10`, own `.next`, removed after; running `foster-ai-development.service` unaffected) all pass. All routes generated; Next 16.3.4 Turbopack.
+- Live Chrome checks on `localhost:3005/editor/test-xylg4`, all confirmed: C1 four handles at opacity 0 at rest, opacity 1 on node hover, all `type=source` with connectable classes; C2 drag from a circle's left handle to a diamond's right handle created a `canvasEdge` with the deterministic `xy-edge__` id; C3 the new edge's path parsed as pure right-angle segments (all L segments axis-aligned, all Q segments degenerate); C4 visible path stroke `rgb(248,250,252)` = `#f8fafc` with `url(#foster-canvas-edge-arrow)` marker def present; C5 hover/selection raises the edge group opacity 0.7 → 1; C6 wide hit area — a click 12px off the visible 2px line selected the edge; C7 double-click opens the focused label input with existing text selected (both from the path and from a saved pill); C8a/C8b/C8c Enter, blur (pane click), and Escape all commit the draft (Escape saves, no cancel path; values stored untrimmed); C9 wheel + pointer drag over the open label input left node positions and the viewport transform unchanged; C11 faint `Add label` hint on an active unlabeled edge.
+- C10 (second-tab collaboration) passed after the root-cause fix: a genuinely fresh tab reported synchronized storage with 2 edges and 7 nodes, its React Flow instance held 2 edges, and its DOM rendered 2 edges. Fresh-tab endpoint nodes initially had empty `measured`/`handleBounds`; moving the measurement update into each custom node's post-commit microtask populated those fields and restored edge rendering. A new third edge created in the first tab appeared in the fresh tab, and its `Fresh-tab` label propagated to the fresh tab through collaborative edge data. Deleting that diagnostic edge through the app's selection + Backspace path returned both tabs to 2 edges. The active working tab's final hydration fit framed all 7 nodes.
+- Cleanup verified: the extra `Chrome check` edge was deleted through the app's own UI path (select + Backspace) after the canvas recovered on reload — the scratch room is back to Sarah's original two edges (one labeled `Label`), which also exercised the collaborative edge-delete path. The scratch project `Spec16 edge sync` was created and deleted through the app UI (confirmed gone from a fresh project list).
+- No commit was created.
+
 ## Verification Evidence (spec 15 palette refinement)
  
 - Sarah's screenshot of the rendered toolbar showed the sixth pair (dark maroon `#3A1726` with rose text `#F75F8F`) reading as near-identical to the red pair next to it. The sixth `NODE_COLORS` entry was replaced with a bright yellow pair, `#2E2600` fill with `#FFD60A` text, keeping the palette convention of a dark same-hue fill plus vivid text. `context/ui-context.md`'s palette table row was updated to match (Yellow).

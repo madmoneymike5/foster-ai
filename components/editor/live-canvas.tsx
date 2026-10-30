@@ -12,21 +12,27 @@ import {
 import {
   ClientSideSuspense,
   useErrorListener,
+  useMutableStorage,
 } from "@liveblocks/react/suspense";
 import { useLiveblocksFlow } from "@liveblocks/react-flow";
 import {
   Background,
   BackgroundVariant,
+  ConnectionLineType,
   ConnectionMode,
   MiniMap,
   ReactFlow,
   type ReactFlowInstance,
+  useNodes,
+  useNodesInitialized,
+  useReactFlow,
 } from "@xyflow/react";
 
+import { canvasNodeTypes, ShapeDragPreview } from "@/components/editor/canvas-node";
 import {
-  canvasNodeTypes,
-  ShapeDragPreview,
-} from "@/components/editor/canvas-node";
+  CanvasEdgeArrowMarker,
+  canvasEdgeTypes,
+} from "@/components/editor/canvas-edge";
 import { ShapePanel } from "@/components/editor/shape-panel";
 import {
   DEFAULT_NODE_COLOR,
@@ -124,6 +130,51 @@ function RoomAccessRevocationListener({
       onAccessRevoked();
     }
   });
+
+  return null;
+}
+
+function HydratedFlowFit() {
+  const nodes = useNodes<CanvasNode>();
+  const nodesInitialized = useNodesInitialized();
+  const hasFitted = useRef(false);
+  const storage = useMutableStorage();
+  const [initialRoomNodeIds] = useState<readonly string[]>(() => {
+    const storedNodes = storage.get("flow")?.get("nodes");
+    return storedNodes ? Array.from(storedNodes.keys()) : [];
+  });
+  const { fitView, viewportInitialized } =
+    useReactFlow<CanvasNode, CanvasEdge>();
+
+  useEffect(() => {
+    if (
+      !initialRoomNodeIds.length ||
+      !initialRoomNodeIds.every((id) => nodes.some((node) => node.id === id)) ||
+      !nodesInitialized ||
+      !viewportInitialized ||
+      hasFitted.current
+    ) {
+      return;
+    }
+
+    let disposed = false;
+    queueMicrotask(() => {
+      if (disposed || hasFitted.current) return;
+
+      hasFitted.current = true;
+      void fitView({ duration: 0, maxZoom: 1 });
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [
+    fitView,
+    initialRoomNodeIds,
+    nodes,
+    nodesInitialized,
+    viewportInitialized,
+  ]);
 
   return null;
 }
@@ -265,12 +316,14 @@ function LiveFlowCanvas() {
       onDrop={handleDrop}
       ref={containerRef}
     >
+      <CanvasEdgeArrowMarker />
       <ReactFlow<CanvasNode, CanvasEdge>
         className="bg-base"
         colorMode="dark"
         nodes={nodes}
         edges={edges}
         nodeTypes={canvasNodeTypes}
+        edgeTypes={canvasEdgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -280,8 +333,14 @@ function LiveFlowCanvas() {
           flowInstanceRef.current = instance;
         }}
         connectionMode={ConnectionMode.Loose}
+        connectionLineType={ConnectionLineType.SmoothStep}
+        defaultEdgeOptions={{
+          type: "canvasEdge",
+          data: { label: "" },
+        }}
         fitView
       >
+        <HydratedFlowFit />
         <MiniMap />
         <Background
           variant={BackgroundVariant.Dots}

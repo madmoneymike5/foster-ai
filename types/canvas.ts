@@ -118,5 +118,10 @@ export interface CanvasNodeData extends Record<string, unknown> {
 /** React Flow node type used by the shared canvas. */
 export type CanvasNode = Node<CanvasNodeData, "canvasNode">;
 
+/** Shared, serializable data stored on each architecture canvas edge. */
+export interface CanvasEdgeData extends Record<string, unknown> {
+  label: string;
+}
+
 /** React Flow edge type used by the shared canvas. */
-export type CanvasEdge = Edge<Record<string, unknown>, "canvasEdge">;
+export type CanvasEdge = Edge<CanvasEdgeData, "canvasEdge">;
