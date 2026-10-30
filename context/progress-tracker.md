@@ -4,14 +4,20 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase (ONLY ONE AT A TIME!)
 
-Feature spec 12 complete and verified — bottom pill toolbar with draggable shapes, drop-to-create nodes, and shape-aware SVG canvas rendering on the spec 11 canvas; pill geometry corrected per `context/current-issues.md`.
+Feature spec 13 complete and verified — node shape rendering replaced (rectangle/pill/circle as CSS shapes, diamond/hexagon/cylinder as inline SVG that scales with node size) with subtle-at-rest / bright-when-selected borders, plus a cursor-anchored ghost preview while dragging a shape from the panel.
 
 ## Current Goal (ONLY ONE AT A TIME!)
 
-Spec 12 is committed as `9151ce3` and the CodeRabbit PR #7 follow-up as `768edef`; PR #7 (`development → main`) is updated and awaiting re-review.
+Spec 13 is implemented and verified on `localhost:3005` but **uncommitted per Sarah's instruction** ("do not commit anything unless I say"); the five changed files (`components/editor/canvas-node.tsx`, `components/editor/live-canvas.tsx`, `components/editor/shape-panel.tsx`, `scripts/smoke/clerk-actors.mjs`, and this tracker) are in the working tree awaiting Sarah's go-ahead to commit.
 
 ## Completed
 
+- Implemented feature spec 13 (node shape + drag preview) on `development` (uncommitted per Sarah's instruction):
+  - `components/editor/canvas-node.tsx` — replaced the all-SVG placeholder renderer: rectangle, pill, and circle now render as CSS shapes (`div` with `border-radius` `0.5rem`/`9999px`/`50%`); diamond, hexagon, and cylinder render as inline SVG in a `0 0 100 100` viewBox with `preserveAspectRatio="none"`, so the geometry stretches to the node's width/height (scales with node size). Borders are subtle at rest (`rgba(color, 0.45)`) and brighten to full color with a soft glow (CSS `box-shadow` / SVG `drop-shadow`) when the node is `selected`. Extracted a shared `ShapeSurface` and added an exported `ShapeDragPreview`: a `pointer-events-none fixed z-50` ghost anchored to the cursor's top-left (the same corner a dropped node lands on), scaled by the current canvas zoom, and rendered at 0.5 opacity. `CanvasNodeView` and `canvasNodeTypes` export names unchanged.
+  - `components/editor/live-canvas.tsx` — `LiveFlowCanvas` tracks the dragged shape + cursor position + zoom in a `dragPreview` state; while a drag is active it attaches `document`-level `drag`/`dragend` listeners to follow the cursor and clears the ghost on drop or cancel, renders `ShapeDragPreview`, and passes `onShapeDragStart` to the shape panel. React Flow retains `fitView` but caps its initial fit at zoom 1 so the first dropped node keeps the same on-screen size as its preview. Drop/create data behavior remains unchanged.
+  - `components/editor/shape-panel.tsx` — added a minimal `onShapeDragStart(shape, x, y)` prop called from the existing button `onDragStart`; uses a synchronously ready 1×1 transparent canvas to suppress the browser's native toolbar-button drag image; no change to the pill toolbar layout.
+  - `scripts/smoke/clerk-actors.mjs` — increased the shared authenticated `/editor` navigation timeout to 90 seconds to tolerate the observed dev-machine memory pressure without affecting fast navigations.
+  - Node rendering stays connected to the Liveblocks-synced canvas state (nodes/edges still flow through `useLiveblocksFlow`); only presentation and the drag preview changed.
 - CodeRabbit PR #7 follow-up (spec 12 shapes, on `development` after `9151ce3`): node IDs now use `crypto.randomUUID()` instead of the per-session `${shape}-${timestamp}-${counter}` IDs that could collide across collaborators; shape toolbar buttons activate on click and keyboard (Enter/Space), creating the shape at the canvas container's center through `screenToFlowPosition`; `ShapeDragPayload`, `SHAPE_DRAG_MIME`, `SHAPE_SIZES`, and `parseShapeDragPayload` moved from `components/editor/shape-panel.tsx` into `types/canvas.ts` (which already owns `NODE_SHAPES`); the tracker's six-Lucide-icons wording corrected. Connection handles for canvas nodes are deferred: no feature spec covers connections yet, so shapes stay non-connectable until that spec lands. Validated with lint, `tsc --noEmit`, an isolated production build, and a live signed-in check on `localhost:3005`: toolbar-button activation created a node centered in the canvas container (measured offset 0,0) with a UUID node id, and the scratch `test-xylg4` room was reset to zero nodes after the check.
 - CodeRabbit review follow-up fixes are uncommitted and validated with lint, TypeScript, the smoke helper tests, and smoke-script syntax checks. Collaborator removal bounds Clerk and Liveblocks calls, retries targeted revocation broadcasts for verified removed-email users, and only clears existing grants. Project deletion commits an `ARCHIVED` ID reservation before deleting the Liveblocks room outside the transaction; auth and project access reject the reservation, and failures leave it available for retry. Spec 10 cleanup scopes fallback project deletion to the fixture owner and fails runner checks on Clerk cleanup errors. React Flow styles load in Tailwind's `components` layer; `ReactFlow` retains `bg-base`.
 - Progress state carried forward into spec 11: specs 08 and 09 were implemented and verified on `development`; spec 07 was complete and ready for review in PR #4. Project IDs are slug-based text values with a suffix (for example, `pricing-page-a1b2`) and also serve as the `/editor/[roomId]` segment and Liveblocks room ID. Migration `migrations/app/20261027T2058_slug_based_project_ids` changed the project and collaborator IDs from UUID to text; `POST /api/projects` accepts the client-generated ID. Long slugs are truncated so the complete ID stays within the 100-character validator limit.
@@ -118,7 +124,7 @@ Spec 12 is committed as `9151ce3` and the CodeRabbit PR #7 follow-up as `768edef
 
 ## In Progress (ONLY ONE AT A TIME!)
 
-- None — the CodeRabbit PR #7 follow-up is committed as `768edef` and pushed to PR #7; awaiting the CodeRabbit re-review on the new commit.
+- None — spec 13 is implemented and verified; the changes are uncommitted in the `development` worktree pending Sarah's commit instruction.
 
 ## Open Questions
 
@@ -126,7 +132,16 @@ Spec 12 is committed as `9151ce3` and the CodeRabbit PR #7 follow-up as `768edef
 
 ## Next Up (ONLY ONE AT A TIME!)
 
-- Spec 13 per the feature spec list, after the PR #7 follow-up lands on `main`.
+- Spec 14 (node-editing) per the feature spec list, once spec 13 is committed.
+
+## Verification Evidence (spec 13)
+
+- Test-quality gate applied. No component test runner exists in the repo; the acceptance evidence is the isolated production build plus a live, signed-in Chromium/Playwright contract check on `localhost:3005`. Kept checks protect the observable contracts: the six shape variants, default sizes, SVG scaling, the subtle/bright border transition, and the ghost preview lifecycle.
+- `npm run lint`, `npx tsc --noEmit`, and an isolated `npm run build` (Next 16.3.4 Turbopack) all pass. The build ran in a disposable sibling copy (`build-spec13`, hardlinked `node_modules`, no shared `.next`) so the running `foster-ai-development.service` on `localhost:3005` and its `.next` were untouched.
+- Live signed-in smoke (a spec 13 Playwright runner, one temporary Clerk owner + fixture project, fully cleaned up): **49/49 checks passed** against `http://localhost:3005/editor/<roomId>`. Rectangle/pill/circle rendered as CSS `div`s with `border-radius` `0.5rem`/`9999px`/`50%` and no `<svg>`; diamond/hexagon/cylinder rendered as inline SVG (4-point polygon / 6-point polygon / `path`+`ellipse`) with `preserveAspectRatio="none"` and `viewBox="0 0 100 100"`, each filling its node's bounding box. Every node used its shape's default flow size (`180×100`, `220×120`, `120×120`, `160×64`, `140×100`, `200×110`). Selecting a node brightened its border from `rgba(237, 237, 237, 0.45)` to `#EDEDED` and added a glow (SVG `drop-shadow`) while a non-selected node kept the subtle border and no glow. Dragging a shape showed a 0.5-opacity ghost anchored at the cursor at the dragged shape's default size (circle = CSS `50%`, hexagon = SVG polygon) that followed the cursor to a new position and disappeared on `dragend`; ghost-only drags added no nodes.
+- Follow-up real-pointer regression check after Sarah's screenshot: on an empty canvas, the first rectangle ghost and dropped node both measured `180×100` with `fitViewOptions.maxZoom=1`; after manual zoom, the ghost and dropped rectangle both measured `360×200`; a real drop cleared the ghost, and a real cancellation over the AI sidebar cleared it without adding a node. The drag screenshot showed the custom ghost with no visible native toolbar-button snapshot. `npx tsc --noEmit`, `npm run lint`, and `git diff --check` all pass after the fix.
+- Cleanup verified: fixture project deleted, `0` `Project` rows in the dev DB, and the temporary Clerk user + throwaway organization removed. No credentials or session values were written to the repository.
+- No commit was created (per Sarah's instruction).
 
 ## Verification Evidence (spec 12)
 

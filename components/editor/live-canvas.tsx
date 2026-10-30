@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   LiveblocksProvider,
   RoomProvider,
@@ -23,7 +23,10 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 
-import { canvasNodeTypes } from "@/components/editor/canvas-node";
+import {
+  canvasNodeTypes,
+  ShapeDragPreview,
+} from "@/components/editor/canvas-node";
 import { ShapePanel } from "@/components/editor/shape-panel";
 import {
   DEFAULT_NODE_COLOR,
@@ -142,6 +145,45 @@ function LiveFlowCanvas() {
     useRef<ReactFlowInstance<CanvasNode, CanvasEdge> | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  // Shape being dragged from the panel and the cursor position, driving the
+  // ghost preview. Cleared on drop or cancel.
+  const [dragPreview, setDragPreview] = useState<{
+    shape: CanvasNodeShape;
+    x: number;
+    y: number;
+    zoom: number;
+  } | null>(null);
+  const isDragging = dragPreview !== null;
+
+  // Follow the cursor while a shape is dragged, then clear the ghost when the
+  // drag ends (drop or cancel). `drag`/`dragend` fire on the drag source and
+  // bubble to the document, so this tracks the cursor across the whole canvas.
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const onDrag = (event: DragEvent) => {
+      setDragPreview((current) =>
+        current ? { ...current, x: event.clientX, y: event.clientY } : current,
+      );
+    };
+    const onDragEnd = () => setDragPreview(null);
+
+    document.addEventListener("drag", onDrag);
+    document.addEventListener("dragend", onDragEnd);
+    return () => {
+      document.removeEventListener("drag", onDrag);
+      document.removeEventListener("dragend", onDragEnd);
+    };
+  }, [isDragging]);
+
+  const handleShapeDragStart = useCallback(
+    (shape: CanvasNodeShape, x: number, y: number) => {
+      const zoom = flowInstanceRef.current?.getZoom() ?? 1;
+      setDragPreview({ shape, x, y, zoom });
+    },
+    [],
+  );
+
   const addCanvasNode = useCallback(
     (payload: ShapeDragPayload, position: { x: number; y: number }) => {
       // RandomUUID so IDs stay unique across collaborators, not just within
@@ -191,6 +233,9 @@ function LiveFlowCanvas() {
       y: event.clientY,
     });
     addCanvasNode(payload, position);
+    // Hide the ghost immediately on drop (dragend also clears it; this makes
+    // "hide after dropped" not depend on browser drag-end event ordering).
+    setDragPreview(null);
   };
 
   /** Creates a shape centered in the canvas from click/keyboard activation. */
@@ -231,6 +276,7 @@ function LiveFlowCanvas() {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onDelete={onDelete}
+        fitViewOptions={{ maxZoom: 1 }}
         onInit={(instance) => {
           flowInstanceRef.current = instance;
         }}
@@ -243,7 +289,18 @@ function LiveFlowCanvas() {
           color="var(--border-default)"
         />
       </ReactFlow>
-      <ShapePanel onCreate={handleCreateShape} />
+      {dragPreview && (
+        <ShapeDragPreview
+          shape={dragPreview.shape}
+          x={dragPreview.x}
+          y={dragPreview.y}
+          zoom={dragPreview.zoom}
+        />
+      )}
+      <ShapePanel
+        onCreate={handleCreateShape}
+        onShapeDragStart={handleShapeDragStart}
+      />
     </div>
   );
 }
