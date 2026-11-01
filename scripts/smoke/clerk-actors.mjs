@@ -182,7 +182,11 @@ export function createClerkActorManager({ browser, appUrl, clerkSecret, repo, or
 
     try {
       await openAuthenticatedPage({ actor, ticket, appUrl, orgPrefix });
-      await actor.page.goto(`${appUrl}/editor`, { waitUntil: "commit" });
+      // The /editor home SSR can take well over Playwright's 30s default on a
+      // loaded dev machine (Turbopack recompile / memory pressure), so allow
+      // headroom here. The session is already seeded above; this just lands on
+      // the app to confirm the Clerk SDK loads.
+      await actor.page.goto(`${appUrl}/editor`, { waitUntil: "commit", timeout: 90000 });
       await actor.page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => undefined);
       if (actor.page.url().includes("/sign-in")) {
         throw new Error(`${role}: app rejected the seeded Clerk session`);

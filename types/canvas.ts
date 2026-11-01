@@ -13,7 +13,7 @@ export const NODE_COLORS = [
   { background: "#2E1938", text: "#BF7AF0" },
   { background: "#331B00", text: "#FF990A" },
   { background: "#3C1618", text: "#FF6166" },
-  { background: "#3A1726", text: "#F75F8F" },
+  { background: "#2E2600", text: "#FFD60A" },
   { background: "#0F2E18", text: "#62C073" },
   { background: "#062822", text: "#0AC7B4" },
 ] as const satisfies readonly CanvasNodeColor[];
@@ -33,6 +33,30 @@ export const NODE_SHAPES = [
 
 export type CanvasNodeColorPair = (typeof NODE_COLORS)[number];
 export type CanvasNodeShape = (typeof NODE_SHAPES)[number];
+
+/**
+ * Return a supported palette pair for a stored node color.
+ *
+ * Rooms can outlive the palette: a node may still contain a pair that was
+ * removed from NODE_COLORS in a later release. Normalizing at read time keeps
+ * the color toolbar from showing no active swatch. The old storage value is
+ * left untouched until the user deliberately picks a new swatch.
+ *
+ * @param color - The pair read from node storage, including legacy values.
+ * @returns A current palette pair for rendering and active-state comparison.
+ */
+export function normalizeNodeColor(
+  color: CanvasNodeColor | null | undefined,
+): CanvasNodeColorPair {
+  const supported = color
+    ? NODE_COLORS.find(
+        (candidate) =>
+          candidate.background === color.background &&
+          candidate.text === color.text,
+      )
+    : undefined;
+  return supported ?? DEFAULT_NODE_COLOR;
+}
 
 /** Custom MIME type for the shape drag payload, so other drags are ignored. */
 export const SHAPE_DRAG_MIME = "application/x-foster-shape";
@@ -63,8 +87,8 @@ export const SHAPE_SIZES: Record<CanvasNodeShape, ShapeDragPayload> = {
  * Parses and validates a raw shape drag payload from a drop event.
  *
  * @param raw - The raw string read from the drop event's data transfer.
- * @returns The validated payload, or null when the payload is missing, not
- *   valid JSON, or not a known shape with positive dimensions.
+ * @returns The validated payload, or null when the payload is missing, invalid,
+ *   or contains dimensions outside the selected shape's usable bounds.
  */
 export function parseShapeDragPayload(raw: string): ShapeDragPayload | null {
   if (!raw) return null;
@@ -78,22 +102,25 @@ export function parseShapeDragPayload(raw: string): ShapeDragPayload | null {
 
   if (typeof parsed !== "object" || parsed === null) return null;
   const candidate = parsed as Partial<ShapeDragPayload>;
+  const shape = NODE_SHAPES.find((supportedShape) => supportedShape === candidate.shape);
+  if (!shape) return null;
+  const maxSize = SHAPE_SIZES[shape];
 
   if (
-    typeof candidate.shape !== "string" ||
-    !NODE_SHAPES.includes(candidate.shape as CanvasNodeShape) ||
     typeof candidate.width !== "number" ||
     typeof candidate.height !== "number" ||
     !Number.isFinite(candidate.width) ||
     !Number.isFinite(candidate.height) ||
     candidate.width <= 0 ||
-    candidate.height <= 0
+    candidate.height <= 0 ||
+    candidate.width > maxSize.width ||
+    candidate.height > maxSize.height
   ) {
     return null;
   }
 
   return {
-    shape: candidate.shape as CanvasNodeShape,
+    shape,
     width: candidate.width,
     height: candidate.height,
   };
@@ -102,12 +129,23 @@ export function parseShapeDragPayload(raw: string): ShapeDragPayload | null {
 /** Shared, serializable data stored on each architecture canvas node. */
 export interface CanvasNodeData extends Record<string, unknown> {
   label: string;
-  color: CanvasNodeColorPair;
+  /**
+   * The node's active background/text pair. Typed as the string-pair
+   * interface rather than the literal `NODE_COLORS` union because Liveblocks
+   * storage types wrap object fields as `LiveObject`s, where literal-union
+   * field types no longer type-check.
+   */
+  color: CanvasNodeColor;
   shape: CanvasNodeShape;
 }
 
 /** React Flow node type used by the shared canvas. */
 export type CanvasNode = Node<CanvasNodeData, "canvasNode">;
 
+/** Shared, serializable data stored on each architecture canvas edge. */
+export interface CanvasEdgeData extends Record<string, unknown> {
+  label: string;
+}
+
 /** React Flow edge type used by the shared canvas. */
-export type CanvasEdge = Edge<Record<string, unknown>, "canvasEdge">;
+export type CanvasEdge = Edge<CanvasEdgeData, "canvasEdge">;

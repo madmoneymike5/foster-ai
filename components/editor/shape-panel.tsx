@@ -63,6 +63,12 @@ interface ShapePanelProps {
    * (Enter/Space) of a toolbar button.
    */
   onCreate: (shape: CanvasNodeShape) => void;
+  /**
+   * Reports a shape at the start of an HTML5 drag so the canvas can show a
+   * cursor-anchored ghost preview. Purely for the preview — it does not
+   * create a node or affect the drop payload.
+   */
+  onShapeDragStart: (shape: CanvasNodeShape, x: number, y: number) => void;
 }
 
 /**
@@ -74,7 +80,7 @@ interface ShapePanelProps {
  * (Enter/Space), creating the shape through `onCreate` — drag is not the only
  * path to adding a shape.
  */
-export function ShapePanel({ onCreate }: ShapePanelProps) {
+export function ShapePanel({ onCreate, onShapeDragStart }: ShapePanelProps) {
   return (
     <div className="absolute bottom-5 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-surface-border bg-surface px-2 py-1.5 shadow-lg">
       {NODE_SHAPES.map((shape) => {
@@ -91,6 +97,13 @@ export function ShapePanel({ onCreate }: ShapePanelProps) {
                 SHAPE_DRAG_MIME,
                 JSON.stringify(SHAPE_SIZES[shape]),
               );
+              // Use a synchronously ready transparent canvas so the browser
+              // does not fall back to its native snapshot of the button.
+              const transparentImage = document.createElement("canvas");
+              transparentImage.width = 1;
+              transparentImage.height = 1;
+              event.dataTransfer.setDragImage(transparentImage, 0, 0);
+              onShapeDragStart(shape, event.clientX, event.clientY);
             }}
             title={`Add ${shape}`}
             type="button"

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   LiveblocksProvider,
   RoomProvider,
@@ -12,18 +12,27 @@ import {
 import {
   ClientSideSuspense,
   useErrorListener,
+  useMutableStorage,
 } from "@liveblocks/react/suspense";
 import { useLiveblocksFlow } from "@liveblocks/react-flow";
 import {
   Background,
   BackgroundVariant,
+  ConnectionLineType,
   ConnectionMode,
   MiniMap,
   ReactFlow,
   type ReactFlowInstance,
+  useNodes,
+  useNodesInitialized,
+  useReactFlow,
 } from "@xyflow/react";
 
-import { canvasNodeTypes } from "@/components/editor/canvas-node";
+import { canvasNodeTypes, ShapeDragPreview } from "@/components/editor/canvas-node";
+import {
+  CanvasEdgeArrowMarker,
+  canvasEdgeTypes,
+} from "@/components/editor/canvas-edge";
 import { ShapePanel } from "@/components/editor/shape-panel";
 import {
   DEFAULT_NODE_COLOR,
@@ -125,6 +134,58 @@ function RoomAccessRevocationListener({
   return null;
 }
 
+function HydratedFlowFit() {
+  const nodes = useNodes<CanvasNode>();
+  const nodesInitialized = useNodesInitialized();
+  const hasFitted = useRef(false);
+  const storage = useMutableStorage();
+  const [initialRoomNodeIds] = useState<readonly string[]>(() => {
+    const storedNodes = storage.get("flow")?.get("nodes");
+    return storedNodes ? Array.from(storedNodes.keys()) : [];
+  });
+  const { fitView, viewportInitialized } =
+    useReactFlow<CanvasNode, CanvasEdge>();
+
+  useEffect(() => {
+    if (
+      !initialRoomNodeIds.length ||
+      !initialRoomNodeIds.every((id) => nodes.some((node) => node.id === id)) ||
+      !nodesInitialized ||
+      !viewportInitialized ||
+      hasFitted.current
+    ) {
+      return;
+    }
+
+    let disposed = false;
+    queueMicrotask(() => {
+      if (disposed || hasFitted.current) return;
+
+      hasFitted.current = true;
+      // Fit only the nodes that existed when the room snapshot was taken.
+      // This prevents a collaborator's newly added node from unexpectedly
+      // zooming the initial view out while preserving the existing fit limits.
+      void fitView({
+        duration: 0,
+        maxZoom: 1,
+        nodes: initialRoomNodeIds.map((id) => ({ id })),
+      });
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [
+    fitView,
+    initialRoomNodeIds,
+    nodes,
+    nodesInitialized,
+    viewportInitialized,
+  ]);
+
+  return null;
+}
+
 function LiveFlowCanvas() {
   const {
     nodes,
@@ -141,6 +202,44 @@ function LiveFlowCanvas() {
   const flowInstanceRef =
     useRef<ReactFlowInstance<CanvasNode, CanvasEdge> | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Shape being dragged from the panel and the cursor position, driving the
+  // ghost preview. Cleared on drop or cancel.
+  const [dragPreview, setDragPreview] = useState<{
+    shape: CanvasNodeShape;
+    x: number;
+    y: number;
+    zoom: number;
+  } | null>(null);
+  const isDragging = dragPreview !== null;
+
+  // Follow document-level pointer coordinates while dragging, then clear the
+  // ghost when the drag ends (drop or cancel).
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const onDragOver = (event: DragEvent) => {
+      setDragPreview((current) =>
+        current ? { ...current, x: event.clientX, y: event.clientY } : current,
+      );
+    };
+    const onDragEnd = () => setDragPreview(null);
+
+    document.addEventListener("dragover", onDragOver);
+    document.addEventListener("dragend", onDragEnd);
+    return () => {
+      document.removeEventListener("dragover", onDragOver);
+      document.removeEventListener("dragend", onDragEnd);
+    };
+  }, [isDragging]);
+
+  const handleShapeDragStart = useCallback(
+    (shape: CanvasNodeShape, x: number, y: number) => {
+      const zoom = flowInstanceRef.current?.getZoom() ?? 1;
+      setDragPreview({ shape, x, y, zoom });
+    },
+    [],
+  );
 
   const addCanvasNode = useCallback(
     (payload: ShapeDragPayload, position: { x: number; y: number }) => {
@@ -191,6 +290,9 @@ function LiveFlowCanvas() {
       y: event.clientY,
     });
     addCanvasNode(payload, position);
+    // Hide the ghost immediately on drop (dragend also clears it; this makes
+    // "hide after dropped" not depend on browser drag-end event ordering).
+    setDragPreview(null);
   };
 
   /** Creates a shape centered in the canvas from click/keyboard activation. */
@@ -221,29 +323,49 @@ function LiveFlowCanvas() {
       onDrop={handleDrop}
       ref={containerRef}
     >
+      <CanvasEdgeArrowMarker />
       <ReactFlow<CanvasNode, CanvasEdge>
         className="bg-base"
         colorMode="dark"
         nodes={nodes}
         edges={edges}
         nodeTypes={canvasNodeTypes}
+        edgeTypes={canvasEdgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onDelete={onDelete}
+        fitViewOptions={{ maxZoom: 1 }}
         onInit={(instance) => {
           flowInstanceRef.current = instance;
         }}
         connectionMode={ConnectionMode.Loose}
+        connectionLineType={ConnectionLineType.SmoothStep}
+        defaultEdgeOptions={{
+          type: "canvasEdge",
+          data: { label: "" },
+        }}
         fitView
       >
+        <HydratedFlowFit />
         <MiniMap />
         <Background
           variant={BackgroundVariant.Dots}
           color="var(--border-default)"
         />
       </ReactFlow>
-      <ShapePanel onCreate={handleCreateShape} />
+      {dragPreview && (
+        <ShapeDragPreview
+          shape={dragPreview.shape}
+          x={dragPreview.x}
+          y={dragPreview.y}
+          zoom={dragPreview.zoom}
+        />
+      )}
+      <ShapePanel
+        onCreate={handleCreateShape}
+        onShapeDragStart={handleShapeDragStart}
+      />
     </div>
   );
 }
