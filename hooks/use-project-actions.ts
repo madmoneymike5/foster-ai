@@ -13,7 +13,12 @@ import { generateProjectId, shortIdSuffix } from "@/lib/slug";
  */
 export type ProjectDialog =
   | { kind: "none" }
-  | { kind: "create" }
+  /**
+   * `templateId`, when present, carries a starter template into the new
+   * project: the create submission navigates to the new workspace with
+   * `?starterTemplate=<id>` so the workspace imports it on mount.
+   */
+  | { kind: "create"; templateId?: string }
   | { kind: "rename"; project: ProjectListItem }
   | { kind: "delete"; project: ProjectListItem };
 
@@ -33,6 +38,8 @@ export interface UseProjectActions {
   error: string | null;
   setName: (name: string) => void;
   openCreate: () => void;
+  /** Open the create dialog carrying a starter template for the new project. */
+  openCreateForTemplate: (templateId: string) => void;
   openRename: (project: ProjectListItem) => void;
   openDelete: (project: ProjectListItem) => void;
   close: () => void;
@@ -87,6 +94,13 @@ export function useProjectActions(): UseProjectActions {
     setDialog({ kind: "create" });
   };
 
+  const openCreateForTemplate = (templateId: string) => {
+    setName("");
+    setCreateSuffix(shortIdSuffix());
+    setError(null);
+    setDialog({ kind: "create", templateId });
+  };
+
   const openRename = (project: ProjectListItem) => {
     setName(project.name);
     setError(null);
@@ -128,8 +142,15 @@ export function useProjectActions(): UseProjectActions {
         }
         setDialog({ kind: "none" });
         // Refresh so the sidebar gains the new row, then open the workspace.
+        // A pending starter template rides along as a query param; the
+        // workspace imports it on mount and strips the param.
         router.refresh();
-        router.push(`/editor/${createRoomId}`);
+        router.push(
+          `/editor/${createRoomId}` +
+            (dialog.templateId
+              ? `?starterTemplate=${encodeURIComponent(dialog.templateId)}`
+              : ""),
+        );
         return;
       }
 
@@ -181,6 +202,7 @@ export function useProjectActions(): UseProjectActions {
     error,
     setName,
     openCreate,
+    openCreateForTemplate,
     openRename,
     openDelete,
     close,

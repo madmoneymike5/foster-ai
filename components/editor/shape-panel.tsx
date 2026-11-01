@@ -10,6 +10,11 @@ import {
 } from "lucide-react";
 
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   NODE_SHAPES,
   SHAPE_DRAG_MIME,
   SHAPE_SIZES,
@@ -85,31 +90,37 @@ export function ShapePanel({ onCreate, onShapeDragStart }: ShapePanelProps) {
     <div className="absolute bottom-5 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-surface-border bg-surface px-2 py-1.5 shadow-lg">
       {NODE_SHAPES.map((shape) => {
         return (
-          <button
-            aria-label={`Add ${shape}`}
-            className="flex h-9 w-9 cursor-grab items-center justify-center rounded-full text-copy-secondary hover:bg-subtle hover:text-copy-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand active:cursor-grabbing"
-            draggable
-            key={shape}
-            onClick={() => onCreate(shape)}
-            onDragStart={(event) => {
-              event.dataTransfer.effectAllowed = "copy";
-              event.dataTransfer.setData(
-                SHAPE_DRAG_MIME,
-                JSON.stringify(SHAPE_SIZES[shape]),
-              );
-              // Use a synchronously ready transparent canvas so the browser
-              // does not fall back to its native snapshot of the button.
-              const transparentImage = document.createElement("canvas");
-              transparentImage.width = 1;
-              transparentImage.height = 1;
-              event.dataTransfer.setDragImage(transparentImage, 0, 0);
-              onShapeDragStart(shape, event.clientX, event.clientY);
-            }}
-            title={`Add ${shape}`}
-            type="button"
-          >
-            <ShapeIcon shape={shape} />
-          </button>
+          <Tooltip key={shape}>
+            <TooltipTrigger
+              render={
+                <button
+                  aria-label={`Add ${shape}`}
+                  className="flex h-9 w-9 cursor-grab items-center justify-center rounded-full text-copy-secondary hover:bg-subtle hover:text-copy-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand active:cursor-grabbing"
+                  draggable
+                  onClick={() => onCreate(shape)}
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = "copy";
+                    event.dataTransfer.setData(
+                      SHAPE_DRAG_MIME,
+                      JSON.stringify(SHAPE_SIZES[shape]),
+                    );
+                    // Use a synchronously ready transparent canvas so the
+                    // browser does not fall back to its native snapshot of
+                    // the button.
+                    const transparentImage = document.createElement("canvas");
+                    transparentImage.width = 1;
+                    transparentImage.height = 1;
+                    event.dataTransfer.setDragImage(transparentImage, 0, 0);
+                    onShapeDragStart(shape, event.clientX, event.clientY);
+                  }}
+                  type="button"
+                />
+              }
+            >
+              <ShapeIcon shape={shape} />
+            </TooltipTrigger>
+            <TooltipContent>Add {shape}</TooltipContent>
+          </Tooltip>
         );
       })}
     </div>

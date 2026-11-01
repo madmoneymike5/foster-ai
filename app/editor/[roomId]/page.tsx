@@ -16,6 +16,9 @@ import { getOwnedProjects, getSharedProjects } from "@/lib/projects";
  */
 export default async function WorkspacePage(props: PageProps<"/editor/[roomId]">) {
   const { roomId } = await props.params;
+  const { starterTemplate } = (await props.searchParams) as {
+    starterTemplate?: string;
+  };
 
   const identity = await getCurrentProjectIdentity();
   if (!identity) {
@@ -47,6 +50,7 @@ export default async function WorkspacePage(props: PageProps<"/editor/[roomId]">
       ownedProjects={ownedProjects}
       sharedProjects={sharedProjects}
       activeProject={activeProject}
+      starterTemplateId={typeof starterTemplate === "string" ? starterTemplate : undefined}
     />
   );
 }

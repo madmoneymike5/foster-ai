@@ -5,22 +5,27 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type SyntheticEvent,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import {
   Handle,
-  NodeResizer,
   NodeToolbar,
   Position,
+  type NodeChange,
   type NodeProps,
   type NodeTypes,
   useKeyPress,
+  useStore,
   useStoreApi,
 } from "@xyflow/react";
 
+import { useCanvasServices } from "@/components/editor/canvas-context";
 import {
   DEFAULT_NODE_COLOR,
   NODE_COLORS,
@@ -36,21 +41,62 @@ const MIN_NODE_WIDTH = 80;
 const MIN_NODE_HEIGHT = 48;
 const EMPTY_LABEL_PLACEHOLDER = "Label";
 /**
- * Bound node labels before each Liveblocks write. A pasted multi-megabyte
- * value would otherwise be sent again on every subsequent keystroke.
+ * Keep node-label writes small enough that a paste cannot turn every
+ * keystroke into a multi-megabyte Liveblocks update. The same limit is exposed
+ * on the textarea so normal typing and pasted input share one contract.
  */
 const MAX_NODE_LABEL_LENGTH = 256;
+/**
+ * Half-width of the band around a visible outline segment that counts as
+ * "hovering the segment" for resize (flow units, so it reads as roughly the
+ * same thickness at typical zooms).
+ */
+const RESIZE_BAND_PX = 10;
+/** Half of a connection point's square hit box; points inside it beat resize. */
+const CONNECTION_POINT_PX = 12;
+/** Reveal target points before the pointer reaches the 24px drop radius. */
+const TARGET_POINT_PREVIEW_DISTANCE = 64;
 
 /**
- * The four connection handles around every node. All use the `source` type:
- * the canvas runs in `ConnectionMode.Loose`, so any handle can start a
- * connection and any same-typed handle on another node can end it.
+ * The eight connection points around every node: the midpoints of the
+ * bounding box's four sides plus its four corners. All use the `source`
+ * type — the canvas runs in `ConnectionMode.Loose`, so any point can start
+ * a connection and any point on another node can end it. `u`/`v` place each
+ * point in the node's 0-1 box (y down).
  */
-const CONNECTION_HANDLES = [
-  { id: "top", position: Position.Top },
-  { id: "right", position: Position.Right },
-  { id: "bottom", position: Position.Bottom },
-  { id: "left", position: Position.Left },
+const CONNECTION_POINTS = [
+  { id: "top", position: Position.Top, u: 0.5, v: 0, cornerClass: "" },
+  { id: "right", position: Position.Right, u: 1, v: 0.5, cornerClass: "" },
+  { id: "bottom", position: Position.Bottom, u: 0.5, v: 1, cornerClass: "" },
+  { id: "left", position: Position.Left, u: 0, v: 0.5, cornerClass: "" },
+  {
+    id: "corner-top-left",
+    position: Position.Top,
+    u: 0,
+    v: 0,
+    cornerClass: "canvas-handle-corner-tl",
+  },
+  {
+    id: "corner-top-right",
+    position: Position.Top,
+    u: 1,
+    v: 0,
+    cornerClass: "canvas-handle-corner-tr",
+  },
+  {
+    id: "corner-bottom-left",
+    position: Position.Bottom,
+    u: 0,
+    v: 1,
+    cornerClass: "canvas-handle-corner-bl",
+  },
+  {
+    id: "corner-bottom-right",
+    position: Position.Bottom,
+    u: 1,
+    v: 1,
+    cornerClass: "canvas-handle-corner-br",
+  },
 ] as const;
 
 /**
@@ -275,12 +321,341 @@ export function ShapeDragPreview({
   );
 }
 
+/** How an outline segment drag resizes the node's box. */
+type ResizeMode =
+  | { kind: "side"; side: "top" | "right" | "bottom" | "left" }
+  | {
+      kind: "corner";
+      corner: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+    };
+
+/** One visible outline segment in the node's 0-1 box space (y down). */
+interface OutlineSegment {
+  a: [number, number];
+  b: [number, number];
+  mode: ResizeMode;
+}
+
+const SIDE = {
+  top: { kind: "side", side: "top" },
+  right: { kind: "side", side: "right" },
+  bottom: { kind: "side", side: "bottom" },
+  left: { kind: "side", side: "left" },
+} as const;
+const CORNER = {
+  topLeft: { kind: "corner", corner: "top-left" },
+  topRight: { kind: "corner", corner: "top-right" },
+  bottomLeft: { kind: "corner", corner: "bottom-left" },
+  bottomRight: { kind: "corner", corner: "bottom-right" },
+} as const;
+
+/**
+ * The visible outline segments for each shape, in the node's 0-1 box space
+ * (y down). Each segment carries the resize mode dragging it performs: a side
+ * drag moves that edge along its axis (cylinder: side = diameter, top/bottom
+ * = height); a corner drag moves both perpendicular edges, deforming the
+ * adjoining segments (a hexagon dragged far enough collapses a vertex into a
+ * point, as its polygon is recomputed from the box).
+ *
+ * The pill and circle are approximated by polygons so their rounded outlines
+ * are hit-testable; the circle's 16 sides map onto the eight compass
+ * directions, giving it four axis zones and four diagonal zones.
+ */
+function outlineSegments(
+  shape: CanvasNodeShape,
+  width: number,
+  height: number,
+): OutlineSegment[] {
+  switch (shape) {
+    case "rectangle":
+      return [
+        { a: [0, 0], b: [1, 0], mode: SIDE.top },
+        { a: [1, 0], b: [1, 1], mode: SIDE.right },
+        { a: [1, 1], b: [0, 1], mode: SIDE.bottom },
+        { a: [0, 1], b: [0, 0], mode: SIDE.left },
+      ];
+    case "pill": {
+      // Flat top/bottom plus a two-segment cap at each end.
+      const rx = Math.min((height / 2) / width, 0.5);
+      return [
+        { a: [rx, 0], b: [1 - rx, 0], mode: SIDE.top },
+        { a: [1 - rx, 0], b: [1, 0.5], mode: CORNER.topRight },
+        { a: [1, 0.5], b: [1 - rx, 1], mode: CORNER.bottomRight },
+        { a: [1 - rx, 1], b: [rx, 1], mode: SIDE.bottom },
+        { a: [rx, 1], b: [0, 0.5], mode: CORNER.bottomLeft },
+        { a: [0, 0.5], b: [rx, 0], mode: CORNER.topLeft },
+      ];
+    }
+    case "circle": {
+      const segments: OutlineSegment[] = [];
+      const sides = 16;
+      for (let i = 0; i < sides; i++) {
+        const t0 = (i / sides) * Math.PI * 2 - Math.PI / 2;
+        const t1 = ((i + 1) / sides) * Math.PI * 2 - Math.PI / 2;
+        segments.push({
+          a: [0.5 + 0.5 * Math.cos(t0), 0.5 + 0.5 * Math.sin(t0)],
+          b: [0.5 + 0.5 * Math.cos(t1), 0.5 + 0.5 * Math.sin(t1)],
+          mode: compassMode((t0 + t1) / 2),
+        });
+      }
+      return segments;
+    }
+    case "diamond":
+      return [
+        { a: [0.5, 0], b: [1, 0.5], mode: CORNER.topRight },
+        { a: [1, 0.5], b: [0.5, 1], mode: CORNER.bottomRight },
+        { a: [0.5, 1], b: [0, 0.5], mode: CORNER.bottomLeft },
+        { a: [0, 0.5], b: [0.5, 0], mode: CORNER.topLeft },
+      ];
+    case "hexagon":
+      return [
+        { a: [0.25, 0.01], b: [0.75, 0.01], mode: SIDE.top },
+        { a: [0.75, 0.01], b: [0.99, 0.5], mode: CORNER.topRight },
+        { a: [0.99, 0.5], b: [0.75, 0.99], mode: CORNER.bottomRight },
+        { a: [0.75, 0.99], b: [0.25, 0.99], mode: SIDE.bottom },
+        { a: [0.25, 0.99], b: [0.01, 0.5], mode: CORNER.bottomLeft },
+        { a: [0.01, 0.5], b: [0.25, 0.01], mode: CORNER.topLeft },
+      ];
+    case "cylinder":
+      // The drawn outline: ellipse caps at y≈7/93 (0-100 viewBox), sides at
+      // x≈1/99 between the caps.
+      return [
+        { a: [0.01, 0.07], b: [0.99, 0.07], mode: SIDE.top },
+        { a: [0.99, 0.07], b: [0.99, 0.93], mode: SIDE.right },
+        { a: [0.99, 0.93], b: [0.01, 0.93], mode: SIDE.bottom },
+        { a: [0.01, 0.93], b: [0.01, 0.07], mode: SIDE.left },
+      ];
+  }
+}
+
+/**
+ * Map an ellipse angle (0 = east, 90° = south — y is down) to the nearest of
+ * the eight compass directions: cardinals become side resizes, diagonals
+ * become corner resizes.
+ */
+function compassMode(angle: number): ResizeMode {
+  const deg = ((angle * 180) / Math.PI + 360) % 360;
+  switch (Math.round(deg / 45) % 8) {
+    case 0:
+      return SIDE.right;
+    case 1:
+      return CORNER.bottomRight;
+    case 2:
+      return SIDE.bottom;
+    case 3:
+      return CORNER.bottomLeft;
+    case 4:
+      return SIDE.left;
+    case 5:
+      return CORNER.topLeft;
+    case 6:
+      return SIDE.top;
+    default:
+      return CORNER.topRight;
+  }
+}
+
+/**
+ * Distance (in flow px) from a local point to a unit-space segment scaled to
+ * the node box, ignoring caps (the outline is a closed loop, so adjacent
+ * segments cover the endpoints).
+ */
+function segmentDistance(
+  segment: OutlineSegment,
+  width: number,
+  height: number,
+  lx: number,
+  ly: number,
+): number {
+  const ax = segment.a[0] * width;
+  const ay = segment.a[1] * height;
+  const bx = segment.b[0] * width;
+  const by = segment.b[1] * height;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lengthSq = dx * dx + dy * dy;
+  let t = lengthSq === 0 ? 0 : ((lx - ax) * dx + (ly - ay) * dy) / lengthSq;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(lx - (ax + t * dx), ly - (ay + t * dy));
+}
+
+/**
+ * Find the outline segment under a local (flow-px) point, or `null` when the
+ * point is outside the resize band or inside a connection point's hit box
+ * (connection points take precedence over resize where they overlap).
+ */
+function hitResizeSegment(
+  shape: CanvasNodeShape,
+  width: number,
+  height: number,
+  lx: number,
+  ly: number,
+): ResizeMode | null {
+  for (const point of CONNECTION_POINTS) {
+    if (
+      Math.hypot(lx - point.u * width, ly - point.v * height) <=
+      CONNECTION_POINT_PX
+    ) {
+      return null;
+    }
+  }
+  let best: { dist: number; mode: ResizeMode } | null = null;
+  for (const segment of outlineSegments(shape, width, height)) {
+    const dist = segmentDistance(segment, width, height, lx, ly);
+    if (dist <= RESIZE_BAND_PX && (!best || dist < best.dist)) {
+      best = { dist, mode: segment.mode };
+    }
+  }
+  return best ? best.mode : null;
+}
+
+/** The bidirectional arrow cursor for a resize mode. */
+function resizeCursor(mode: ResizeMode): string {
+  if (mode.kind === "side") {
+    return mode.side === "top" || mode.side === "bottom"
+      ? "ns-resize"
+      : "ew-resize";
+  }
+  return mode.corner === "top-left" || mode.corner === "bottom-right"
+    ? "nwse-resize"
+    : "nesw-resize";
+}
+
+interface NodeBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface ResizeDrag {
+  mode: ResizeMode;
+  pointerX: number;
+  pointerY: number;
+  /** The box at the start of the gesture. Deltas are always measured from
+      here so repeated intermediate commits stay idempotent. */
+  startBox: NodeBox;
+  /** The box after the latest commit (feeds the release-time change). */
+  box: NodeBox;
+}
+
+const clamp = (value: number, min: number) => Math.max(min, value);
+
+/**
+ * The pointer id every mouse-originated gesture carries (per the Pointer
+ * Events spec, `PointerEvent.MOUSE_POINTER_ID`). Referenced as a literal
+ * because the installed TypeScript lib omits the constant.
+ */
+const MOUSE_POINTER_ID = 1;
+
+/**
+ * Compute the node box after applying a segment resize. `pointer` is the
+ * current pointer position in flow coordinates; the delta is measured from
+ * the drag's start. With `keepAspect` (Control held) the box preserves its
+ * start aspect ratio: side drags re-center on the fixed axis, corner drags
+ * anchor on the opposite corner.
+ */
+function applyResize(
+  drag: ResizeDrag,
+  pointer: { x: number; y: number },
+  keepAspect: boolean,
+): NodeBox {
+  const { mode, box } = drag;
+  const dx = pointer.x - drag.pointerX;
+  const dy = pointer.y - drag.pointerY;
+  const ratio = box.w / box.h;
+  let { x, y, w, h } = box;
+
+  const lockHeight = (newWidth: number) => {
+    h = clamp(newWidth / ratio, MIN_NODE_HEIGHT);
+    w = clamp(h * ratio, MIN_NODE_WIDTH);
+  };
+  const lockWidth = (newHeight: number) => {
+    w = clamp(newHeight * ratio, MIN_NODE_WIDTH);
+    h = clamp(w / ratio, MIN_NODE_HEIGHT);
+  };
+
+  if (mode.kind === "side") {
+    switch (mode.side) {
+      case "right":
+        w = clamp(w + dx, MIN_NODE_WIDTH);
+        if (keepAspect) {
+          lockHeight(w);
+          y += (box.h - h) / 2;
+        }
+        break;
+      case "left":
+        w = clamp(w - dx, MIN_NODE_WIDTH);
+        x += box.w - w;
+        if (keepAspect) {
+          lockHeight(w);
+          y += (box.h - h) / 2;
+        }
+        break;
+      case "top":
+        h = clamp(h - dy, MIN_NODE_HEIGHT);
+        y += box.h - h;
+        if (keepAspect) {
+          lockWidth(h);
+          x += (box.w - w) / 2;
+        }
+        break;
+      case "bottom":
+        h = clamp(h + dy, MIN_NODE_HEIGHT);
+        if (keepAspect) {
+          lockWidth(h);
+          x += (box.w - w) / 2;
+        }
+        break;
+    }
+    return { x, y, w, h };
+  }
+
+  // Corner drags anchor on the opposite corner.
+  switch (mode.corner) {
+    case "top-right":
+      w = clamp(w + dx, MIN_NODE_WIDTH);
+      h = clamp(h - dy, MIN_NODE_HEIGHT);
+      if (keepAspect) lockHeight(w);
+      y += box.h - h;
+      return { x, y, w, h };
+    case "bottom-right":
+      w = clamp(w + dx, MIN_NODE_WIDTH);
+      h = clamp(h + dy, MIN_NODE_HEIGHT);
+      if (keepAspect) lockHeight(w);
+      return { x, y, w, h };
+    case "top-left":
+      w = clamp(w - dx, MIN_NODE_WIDTH);
+      h = clamp(h - dy, MIN_NODE_HEIGHT);
+      if (keepAspect) lockHeight(w);
+      x += box.w - w;
+      y += box.h - h;
+      return { x, y, w, h };
+    case "bottom-left":
+      w = clamp(w - dx, MIN_NODE_WIDTH);
+      h = clamp(h + dy, MIN_NODE_HEIGHT);
+      if (keepAspect) lockHeight(w);
+      x += box.w - w;
+      return { x, y, w, h };
+  }
+}
+
 /**
  * Renderer for the shared canvas node type.
  *
- * Draws the node's shape (see `ShapeSurface`) with the label centered over it.
- * The wrapper's width and height come from the shape's drag payload; this
- * component renders inside that wrapper, so the shape fills it exactly.
+ * Draws the node's shape (see `ShapeSurface`) with the label centered over
+ * it. The wrapper's width and height come from the node's stored dimensions;
+ * this component renders inside that wrapper, so the shape fills it exactly.
+ *
+ * Interaction model:
+ * - Eight connection points (side midpoints + corners) let a connection
+ *   start; dots fade in when the node is hovered or when a connection is
+ *   being dragged within snap distance, so targets reveal before the cursor
+ *   has to land fully on the shape.
+ * - Resizing follows the drawn outline: hovering a visible segment shows a
+ *   bidirectional arrow, and dragging it resizes the node's box through the
+ *   standard `dimensions` change stream (one history entry per gesture).
+ *   Segments near the eight connection points defer to them.
  *
  * @param props - The React Flow node props for a `canvasNode` node.
  */
@@ -288,9 +663,14 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
   const [isEditing, setIsEditing] = useState(false);
   const controlPressed = useKeyPress("Control", { preventDefault: false });
   const store = useStoreApi();
+  const services = useCanvasServices();
   const [draftLabel, setDraftLabel] = useState(data.label);
   const nodeElementRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isHovered, setIsHovered] = useState(false);
+  const [hoverCursor, setHoverCursor] = useState<string | null>(null);
+  const resizeDragRef = useRef<ResizeDrag | null>(null);
+
   const updateLabel = useMutation(
     ({ storage }, label: string) => {
       const node = storage.get("flow")?.get("nodes").get(id);
@@ -314,8 +694,8 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
     [id],
   );
   // Liveblocks deep-copies storage values, so active comparison is by both
-  // fields, not object identity. Normalize legacy values first so every node
-  // still has one active swatch in the current palette.
+  // fields, not object identity. Normalize legacy stored pairs first so an
+  // older node still has one visibly active swatch in the current palette.
   const displayColor = normalizeNodeColor(data.color);
   const isColorActive = (pair: CanvasNodeColorPair) =>
     displayColor.background === pair.background &&
@@ -350,6 +730,72 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
     textareaRef.current?.select();
   }, [isEditing]);
 
+  /**
+   * Connection points within snap distance while a connection is being
+   * dragged, as a stable string (a fresh object per store change would
+   * re-render every node on every pan frame).
+   */
+  const nearPointIds = useStore((state) => {
+    const connection = state.connection;
+    if (!connection.inProgress || !connection.to || !connection.fromNode) {
+      return "";
+    }
+    const internal = state.nodeLookup.get(id);
+    if (!internal || id === connection.fromNode.id) return "";
+    const width = internal.width ?? internal.measured?.width;
+    const height = internal.height ?? internal.measured?.height;
+    if (!width || !height) return "";
+    const position = internal.internals.positionAbsolute;
+    const distanceX = Math.max(
+      position.x - connection.to.x,
+      0,
+      connection.to.x - (position.x + width),
+    );
+    const distanceY = Math.max(
+      position.y - connection.to.y,
+      0,
+      connection.to.y - (position.y + height),
+    );
+    // Reveal every target point while the pointer approaches the node. The
+    // actual 24px per-point snap radius remains React Flow's drop contract.
+    if (
+      Math.hypot(distanceX, distanceY) <= TARGET_POINT_PREVIEW_DISTANCE
+    ) {
+      return CONNECTION_POINTS.map((point) => point.id).join("|");
+    }
+    return "";
+  });
+  const nearPoints = useMemo(
+    () => new Set(nearPointIds ? nearPointIds.split("|") : []),
+    [nearPointIds],
+  );
+  const connectionSourceNodeId = useStore((state) =>
+    state.connection.inProgress ? state.connection.fromNode?.id ?? null : null,
+  );
+  const showHoveredPoints =
+    isHovered &&
+    !services.reconnectActive &&
+    connectionSourceNodeId !== id;
+
+  /** Read this node's current box straight from the store (no re-render). */
+  const readBox = (): NodeBox | null => {
+    const internal = store.getState().nodeLookup.get(id);
+    if (!internal) return null;
+    const w = internal.width ?? internal.measured?.width;
+    const h = internal.height ?? internal.measured?.height;
+    if (!w || !h) return null;
+    const position = internal.internals.positionAbsolute;
+    return { x: position.x, y: position.y, w, h };
+  };
+
+  /** Local (flow-px, node-relative) point for a client point. */
+  const localPoint = (clientX: number, clientY: number) => {
+    const flow = services.screenToFlowPosition({ x: clientX, y: clientY });
+    const box = readBox();
+    if (!box) return null;
+    return { lx: flow.x - box.x, ly: flow.y - box.y, flow, box };
+  };
+
   const startEditing = (event: SyntheticEvent<HTMLDivElement>) => {
     event.stopPropagation();
     setDraftLabel(data.label);
@@ -363,9 +809,9 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
     }
   };
   const handleLabelChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    // maxLength handles normal browser input. Slicing here is still needed as
-    // a storage boundary because pasted/programmatic values can bypass the
-    // assumption that the browser already enforced the limit.
+    // Browsers enforce maxLength for ordinary input, but explicitly slicing
+    // here also protects the storage mutation from oversized pasted or
+    // programmatically supplied values.
     const label = event.target.value.slice(0, MAX_NODE_LABEL_LENGTH);
     setDraftLabel(label);
     updateLabel(label);
@@ -380,36 +826,176 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
   const stopCanvasInteraction = (event: SyntheticEvent) => {
     event.stopPropagation();
   };
-  const allowControlResize = (event: MouseEvent<HTMLDivElement>) => {
+
+  /**
+   * Mouse move over the node (not during a resize drag): show the
+   * bidirectional arrow when the cursor is on a visible outline segment.
+   * Skipped entirely over connection points, the color toolbar, and the
+   * label editor, which own their own cursors/behavior.
+   */
+  const handleMouseMove = (event: MouseEvent<HTMLDivElement>) => {
+    if (resizeDragRef.current || isEditing) {
+      return;
+    }
+    const target = event.target as Element;
     if (
-      !event.ctrlKey ||
-      !(event.target instanceof Element) ||
-      !event.target.closest(".react-flow__resize-control")
+      target.closest(".react-flow__handle") ||
+      target.closest(".react-flow__node-toolbar") ||
+      target.closest("textarea")
+    ) {
+      if (hoverCursor) setHoverCursor(null);
+      return;
+    }
+    const local = localPoint(event.clientX, event.clientY);
+    const mode = local
+      ? hitResizeSegment(data.shape, local.box.w, local.box.h, local.lx, local.ly)
+      : null;
+    const cursor = mode ? resizeCursor(mode) : null;
+    if (cursor !== hoverCursor) setHoverCursor(cursor);
+  };
+
+  const commitResize = (drag: ResizeDrag, flow: { x: number; y: number }) => {
+    // Always recompute from the start box with the total delta — applying
+    // the delta to the already-moved box would compound every commit.
+    const next = applyResize({ ...drag, box: drag.startBox }, flow, controlPressed);
+    if (
+      next.x === drag.box.x &&
+      next.y === drag.box.y &&
+      next.w === drag.box.w &&
+      next.h === drag.box.h
     ) {
       return;
     }
-
-    // d3-drag rejects Ctrl+mousedown; keepAspectRatio already owns the modifier state.
-    Object.defineProperty(event.nativeEvent, "ctrlKey", {
-      configurable: true,
-      value: false,
-    });
-  };
-  const stopResizeSelection = (event: SyntheticEvent<HTMLDivElement>) => {
-    if (
-      event.target instanceof Element &&
-      event.target.closest(".react-flow__resize-control")
-    ) {
-      event.stopPropagation();
+    const changes: NodeChange<CanvasNode>[] = [];
+    if (next.x !== drag.box.x || next.y !== drag.box.y) {
+      changes.push({ type: "position", id, position: { x: next.x, y: next.y } });
     }
+    changes.push({
+      type: "dimensions",
+      id,
+      resizing: true,
+      setAttributes:
+        drag.mode.kind === "side"
+          ? drag.mode.side === "top" || drag.mode.side === "bottom"
+            ? "height"
+            : "width"
+          : true,
+      dimensions: { width: next.w, height: next.h },
+    });
+    services.onNodesChange(changes);
+    drag.box = next;
+  };
+
+  /**
+   * Mouse down on the node body: start an outline resize when the press
+   * lands on a visible segment (stopping propagation so React Flow does not
+   * also drag the node), otherwise let the event bubble for the normal node
+   * drag. Connection point presses are left alone — the handle element owns
+   * them and starts a React Flow connection.
+   *
+   * This must run as a native *capture-phase* listener: React Flow's
+   * d3-drag attaches its mousedown to the node wrapper element, and React's
+   * delegated synthetic handlers only fire once the event reaches the app
+   * root — after d3-drag has already started a node drag. In the capture
+   * phase the press is still on its way in, so stopping it here keeps
+   * d3-drag from ever seeing resize-segment presses.
+   */
+  const resizeMouseDownRef = useRef<(event: WindowEventMap["mousedown"]) => void>(
+    () => {},
+  );
+  useLayoutEffect(() => {
+    resizeMouseDownRef.current = (event: WindowEventMap["mousedown"]) => {
+    if (event.button !== 0 || isEditing) return;
+    const target = event.target as Element;
+    if (
+      target.closest(".react-flow__handle") ||
+      target.closest(".react-flow__node-toolbar") ||
+      target.closest("textarea")
+    ) {
+      return;
+    }
+    const local = localPoint(event.clientX, event.clientY);
+    if (!local) return;
+    const mode = hitResizeSegment(
+      data.shape,
+      local.box.w,
+      local.box.h,
+      local.lx,
+      local.ly,
+    );
+    if (!mode) return;
+
+    event.stopPropagation();
+    resizeDragRef.current = {
+      mode,
+      pointerX: local.flow.x,
+      pointerY: local.flow.y,
+      startBox: local.box,
+      box: local.box,
+    };
+    // Capture keeps the drag receiving moves even when the pointer races
+    // off the node. The mousedown map type omits pointerId (a plain
+    // MouseEvent carries none at runtime either), and the mouse's pointer
+    // id is always this value.
+    try {
+      nodeElementRef.current?.setPointerCapture(MOUSE_POINTER_ID);
+    } catch {
+      // Capture is a convenience: without it the resize still commits on
+      // every pointermove that reaches the node.
+    }
+    };
+  });
+  useEffect(() => {
+    const el = nodeElementRef.current;
+    if (!el) return;
+    const listener = (event: WindowEventMap["mousedown"]) =>
+      resizeMouseDownRef.current(event);
+    el.addEventListener("mousedown", listener, true);
+    return () => el.removeEventListener("mousedown", listener, true);
+  }, []);
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = resizeDragRef.current;
+    if (!drag) return;
+    const flow = services.screenToFlowPosition({
+      x: event.clientX,
+      y: event.clientY,
+    });
+    commitResize(drag, flow);
+  };
+
+  const endResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = resizeDragRef.current;
+    if (!drag) return;
+    resizeDragRef.current = null;
+    if (nodeElementRef.current?.hasPointerCapture(event.pointerId)) {
+      nodeElementRef.current.releasePointerCapture(event.pointerId);
+    }
+    // Close the resize: resume history so the gesture is one undo step.
+    services.onNodesChange([
+      {
+        type: "dimensions",
+        id,
+        resizing: false,
+        dimensions: { width: drag.box.w, height: drag.box.h },
+      },
+    ]);
   };
 
   return (
     <div
       className="group relative h-full w-full text-sm"
-      onClick={stopResizeSelection}
       ref={nodeElementRef}
-      onMouseDownCapture={allowControlResize}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        setHoverCursor(null);
+      }}
+      onMouseMove={handleMouseMove}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endResize}
+      onPointerCancel={endResize}
+      style={{ cursor: hoverCursor ?? undefined }}
     >
       <ShapeSurface
         background={displayColor.background}
@@ -417,40 +1003,46 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
         selected={selected}
         shape={data.shape}
       />
-      {/* Connection handles: hidden until the node is hovered (group-hover
-          fades them in). Rendered before NodeResizer so that on a selected
-          node the resize controls sit above the dots they share edge
-          midpoints with, keeping spec 14's eight resize grips fully usable. */}
-      {CONNECTION_HANDLES.map(({ id: handleId, position }) => (
+      {/* Connection points: 24x24 hit boxes with a small visible dot. The dot
+          fades in when the node is hovered or when a connection is being
+          dragged within snap distance (nearPoints), so target points reveal
+          before the cursor has to land fully on the shape. Rendered after
+          everything else so they sit above the outline-resize zones where
+          they overlap. */}
+      {CONNECTION_POINTS.map(({ id: pointId, position, cornerClass }) => (
         <Handle
-          className="nodrag h-2 w-2 rounded-full opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-          id={handleId}
-          key={handleId}
+          className={`nodrag flex h-6 w-6 items-center justify-center rounded-full ${cornerClass}`}
+          id={pointId}
+          key={pointId}
           position={position}
+          // The hit box itself must stay invisible: React Flow's default
+          // handle styles (background + border) would render a visible
+          // circle on every point at all times. Only the inner dot below
+          // is ever drawn, and only on hover or drag proximity.
           style={{
-            backgroundColor: "var(--text-primary)",
-            border: "1.5px solid var(--bg-base)",
+            background: "transparent",
+            border: "none",
+            pointerEvents: "all",
+            zIndex: 20,
           }}
           type="source"
-        />
+        >
+          <span
+            aria-hidden="true"
+            className="block h-2 w-2 rounded-full transition-opacity duration-150"
+            style={{
+              backgroundColor: "var(--text-primary)",
+              border: "1.5px solid var(--bg-base)",
+              opacity:
+                showHoveredPoints ||
+                services.reconnectTargetNodeId === id ||
+                nearPoints.has(pointId)
+                  ? 1
+                  : 0,
+            }}
+          />
+        </Handle>
       ))}
-      <NodeResizer
-        isVisible={selected}
-        minWidth={MIN_NODE_WIDTH}
-        minHeight={MIN_NODE_HEIGHT}
-        keepAspectRatio={controlPressed}
-        handleStyle={{
-          width: 8,
-          height: 8,
-          border: "1px solid var(--border-subtle)",
-          borderRadius: "2px",
-          backgroundColor: "var(--bg-elevated)",
-        }}
-        lineStyle={{
-          borderColor: "var(--border-subtle)",
-          opacity: 0.65,
-        }}
-      />
       {/* NodeToolbar renders only when this node is the sole selected node and
           keeps the swatches at a constant screen size above the node.
           nodrag/nopan/nowheel plus stopped pointer, mouse, click, wheel, and

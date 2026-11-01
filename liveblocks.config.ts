@@ -11,7 +11,7 @@ declare global {
       // not on the canvas.
       cursor: { x: number; y: number } | null;
       // Whether the participant's client is waiting on an AI response.
-      isThinking: boolean;
+      thinking: boolean;
     };
 
     // The flow root is initialized by useLiveblocksFlow after Storage loads.
