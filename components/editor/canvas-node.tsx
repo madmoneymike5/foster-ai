@@ -24,6 +24,7 @@ import {
 import {
   DEFAULT_NODE_COLOR,
   NODE_COLORS,
+  normalizeNodeColor,
   SHAPE_SIZES,
   type CanvasNode,
   type CanvasNodeColorPair,
@@ -34,6 +35,11 @@ const SVG_SHAPE_STROKE = 2;
 const MIN_NODE_WIDTH = 80;
 const MIN_NODE_HEIGHT = 48;
 const EMPTY_LABEL_PLACEHOLDER = "Label";
+/**
+ * Bound node labels before each Liveblocks write. A pasted multi-megabyte
+ * value would otherwise be sent again on every subsequent keystroke.
+ */
+const MAX_NODE_LABEL_LENGTH = 256;
 
 /**
  * The four connection handles around every node. All use the `source` type:
@@ -308,9 +314,12 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
     [id],
   );
   // Liveblocks deep-copies storage values, so active comparison is by both
-  // fields, not object identity.
+  // fields, not object identity. Normalize legacy values first so every node
+  // still has one active swatch in the current palette.
+  const displayColor = normalizeNodeColor(data.color);
   const isColorActive = (pair: CanvasNodeColorPair) =>
-    data.color.background === pair.background && data.color.text === pair.text;
+    displayColor.background === pair.background &&
+    displayColor.text === pair.text;
 
   // Liveblocks can hydrate a node after React Flow's initial empty mount. The
   // node's own effect runs after its handles exist, which is the safe point to
@@ -354,7 +363,10 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
     }
   };
   const handleLabelChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    const label = event.target.value;
+    // maxLength handles normal browser input. Slicing here is still needed as
+    // a storage boundary because pasted/programmatic values can bypass the
+    // assumption that the browser already enforced the limit.
+    const label = event.target.value.slice(0, MAX_NODE_LABEL_LENGTH);
     setDraftLabel(label);
     updateLabel(label);
   };
@@ -400,8 +412,8 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
       onMouseDownCapture={allowControlResize}
     >
       <ShapeSurface
-        background={data.color.background}
-        color={data.color.text}
+        background={displayColor.background}
+        color={displayColor.text}
         selected={selected}
         shape={data.shape}
       />
@@ -474,6 +486,7 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
           <textarea
             aria-label="Node label"
             className="nodrag nopan nowheel min-h-6 max-h-full w-full resize-none overflow-y-auto border-0 bg-transparent p-0 text-center text-sm leading-6 outline-none placeholder:text-copy-faint [field-sizing:content] focus:ring-0"
+            maxLength={MAX_NODE_LABEL_LENGTH}
             onBlur={() => setIsEditing(false)}
             onChange={handleLabelChange}
             onKeyDown={handleTextareaKeyDown}
@@ -481,7 +494,7 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
             ref={textareaRef}
             rows={1}
             value={draftLabel}
-            style={{ color: data.color.text }}
+            style={{ color: displayColor.text }}
           />
         </div>
       ) : (
@@ -491,9 +504,9 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
           tabIndex={0}
           onDoubleClick={startEditing}
           onKeyDown={handleLabelKeyDown}
-          aria-label="Edit node label"
+          aria-label={`Edit node label: ${data.label || EMPTY_LABEL_PLACEHOLDER}`}
           style={{
-            color: data.label ? data.color.text : "var(--text-faint)",
+            color: data.label ? displayColor.text : "var(--text-faint)",
           }}
         >
           <span className="min-w-0 max-w-full max-h-full overflow-hidden whitespace-pre-wrap [overflow-wrap:anywhere]">

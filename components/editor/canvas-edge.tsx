@@ -94,6 +94,10 @@ export function CanvasEdgeView({
   const [isEditing, setIsEditing] = useState(false);
   const [draftLabel, setDraftLabel] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  // The SVG edge and the HTML label are rendered in different layers. These
+  // refs let hover state survive the pointer's short trip between them.
+  const edgeHoverRef = useRef<SVGGElement>(null);
+  const edgeLabelRef = useRef<HTMLDivElement>(null);
   const label = data?.label ?? "";
   const isActive = isHovered || selected || isEditing;
 
@@ -135,6 +139,30 @@ export function CanvasEdgeView({
     event.stopPropagation();
     startEditing();
   };
+  const handleLabelKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+    // Treat both label presentations as real controls for keyboard users.
+    // Stopping propagation keeps Enter and Space away from canvas shortcuts.
+    event.stopPropagation();
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    startEditing();
+  };
+  const handleHoverLeave = (event: {
+    relatedTarget: EventTarget | null;
+  }) => {
+    // The label is portalled outside the SVG group. Keep the hint mounted when
+    // the pointer is moving into that label, and clear hover only after the
+    // pointer has left both the edge and the label.
+    const nextTarget = event.relatedTarget;
+    if (
+      nextTarget instanceof Node &&
+      (edgeHoverRef.current?.contains(nextTarget) ||
+        edgeLabelRef.current?.contains(nextTarget))
+    ) {
+      return;
+    }
+    setIsHovered(false);
+  };
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     setDraftLabel(event.target.value);
   };
@@ -173,7 +201,8 @@ export function CanvasEdgeView({
         )}
         onDoubleClick={handleEdgeDoubleClick}
         onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        onMouseLeave={handleHoverLeave}
+        ref={edgeHoverRef}
       >
         {/* Wide invisible hit target: pointer-events "stroke" makes it
             hit-testable regardless of the transparent stroke. */}
@@ -205,6 +234,9 @@ export function CanvasEdgeView({
             nodrag/nopan/nowheel plus stopped propagation. */}
         <div
           className="nodrag nopan nowheel"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={handleHoverLeave}
+          ref={edgeLabelRef}
           style={{
             position: "absolute",
             pointerEvents: "all",
@@ -228,15 +260,23 @@ export function CanvasEdgeView({
             />
           ) : label ? (
             <span
-              className="rounded-full border border-surface-border bg-surface px-2 py-0.5 text-[11px] leading-4 text-copy-secondary shadow-sm whitespace-nowrap"
+              aria-label={`Edit edge label: ${label}`}
+              className="block max-w-48 truncate rounded-full border border-surface-border bg-surface px-2 py-0.5 text-[11px] leading-4 text-copy-secondary shadow-sm"
               onDoubleClick={startEditing}
+              onKeyDown={handleLabelKeyDown}
+              role="button"
+              tabIndex={0}
             >
               {label}
             </span>
           ) : isActive ? (
             <span
-              className="rounded-full bg-base/80 px-2 py-0.5 text-[11px] leading-4 text-copy-faint whitespace-nowrap"
+              aria-label="Add edge label"
+              className="block max-w-48 truncate rounded-full bg-base/80 px-2 py-0.5 text-[11px] leading-4 text-copy-faint"
               onDoubleClick={startEditing}
+              onKeyDown={handleLabelKeyDown}
+              role="button"
+              tabIndex={0}
             >
               {EDGE_LABEL_HINT}
             </span>

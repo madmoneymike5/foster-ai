@@ -34,6 +34,30 @@ export const NODE_SHAPES = [
 export type CanvasNodeColorPair = (typeof NODE_COLORS)[number];
 export type CanvasNodeShape = (typeof NODE_SHAPES)[number];
 
+/**
+ * Return a supported palette pair for a stored node color.
+ *
+ * Rooms can outlive the palette: a node may still contain a pair that was
+ * removed from NODE_COLORS in a later release. Normalizing at read time keeps
+ * the color toolbar from showing no active swatch. The old storage value is
+ * left untouched until the user deliberately picks a new swatch.
+ *
+ * @param color - The pair read from node storage, including legacy values.
+ * @returns A current palette pair for rendering and active-state comparison.
+ */
+export function normalizeNodeColor(
+  color: CanvasNodeColor | null | undefined,
+): CanvasNodeColorPair {
+  const supported = color
+    ? NODE_COLORS.find(
+        (candidate) =>
+          candidate.background === color.background &&
+          candidate.text === color.text,
+      )
+    : undefined;
+  return supported ?? DEFAULT_NODE_COLOR;
+}
+
 /** Custom MIME type for the shape drag payload, so other drags are ignored. */
 export const SHAPE_DRAG_MIME = "application/x-foster-shape";
 

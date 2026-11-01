@@ -162,7 +162,14 @@ function HydratedFlowFit() {
       if (disposed || hasFitted.current) return;
 
       hasFitted.current = true;
-      void fitView({ duration: 0, maxZoom: 1 });
+      // Fit only the nodes that existed when the room snapshot was taken.
+      // This prevents a collaborator's newly added node from unexpectedly
+      // zooming the initial view out while preserving the existing fit limits.
+      void fitView({
+        duration: 0,
+        maxZoom: 1,
+        nodes: initialRoomNodeIds.map((id) => ({ id })),
+      });
     });
 
     return () => {
