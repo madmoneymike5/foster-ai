@@ -112,31 +112,10 @@ export function EditorWorkspace({
     pendingImportRef.current = pendingImport;
   }, [pendingImport]);
 
-  const handleTemplateImported = useCallback((requestId: string) => {
-    const current = pendingImportRef.current;
-    if (!current || current.requestId !== requestId) return;
-    // Node ids are deterministic per mode + requestId, so they can be
-    // derived here instead of reported back by the canvas: an added
-    // template's ids are the remapped ones, a replacement's the template's.
-    const nodeIds =
-      current.mode === "add"
-        ? withRemappedIds(current.requestId, current.template).nodeIds
-        : current.template.nodes.map((node) => node.id);
-    setAppliedImport({ requestId, nodeIds });
-    setPendingImport(null);
-  }, []);
-  const handleImportConflict = useCallback(
-    (request: CanvasImportRequest) => {
-      const current = pendingImportRef.current;
-      if (!current || current.requestId !== request.requestId) return;
-      setConflictImport(current);
-    },
-    [],
-  );
   // A pending import belongs to the room it was selected in; deriving the
   // canvas prop this way keeps a stale request from ever reaching a
-  // different room. A URL-carried template (from a new project creation)
-  // is adopted the same way, as a deterministic replace-mode request.
+  // different room. URL imports use the same `ask` flow as modal imports so a
+  // populated canvas cannot be replaced without confirmation.
   const urlImport = useMemo<
     (CanvasImportRequest & { projectId: string }) | null
   >(() => {
@@ -146,7 +125,7 @@ export function EditorWorkspace({
     return {
       requestId: `url-${starterTemplateId}-${activeProject.id}`,
       template,
-      mode: "replace",
+      mode: "ask",
       projectId: activeProject.id,
     };
   }, [starterTemplateId, activeProject]);
@@ -156,13 +135,43 @@ export function EditorWorkspace({
       : urlImport?.projectId === activeProject?.id
         ? urlImport
         : null;
-  // Strip the starter template param once the workspace has it; the derived
-  // request is idempotent (a stable requestId), so removing the param cannot
-  // drop or duplicate the import.
-  useEffect(() => {
-    if (!starterTemplateId || !activeProject) return;
-    router.replace(`/editor/${activeProject.id}`);
-  }, [starterTemplateId, activeProject, router]);
+
+  const handleTemplateImported = useCallback((requestId: string) => {
+    const pending = pendingImportRef.current;
+    const current =
+      pending?.requestId === requestId
+        ? pending
+        : urlImport?.requestId === requestId
+          ? urlImport
+          : null;
+    if (!current) return;
+    const nodeIds =
+      current.mode === "add"
+        ? withRemappedIds(current.requestId, current.template).nodeIds
+        : current.template.nodes.map((node) => node.id);
+    setAppliedImport({ requestId, nodeIds });
+    if (pending?.requestId === requestId) {
+      pendingImportRef.current = null;
+      setPendingImport(null);
+    }
+    if (urlImport?.requestId === requestId && activeProject) {
+      router.replace(`/editor/${activeProject.id}`);
+    }
+  }, [activeProject, router, urlImport]);
+  const handleImportConflict = useCallback(
+    (request: CanvasImportRequest) => {
+      const pending = pendingImportRef.current;
+      const current =
+        pending?.requestId === request.requestId
+          ? pending
+          : urlImport?.requestId === request.requestId
+            ? urlImport
+            : null;
+      if (!current) return;
+      setConflictImport(current);
+    },
+    [urlImport],
+  );
   const actions = useProjectActions();
 
   /** Answer the import conflict with an explicit-mode follow-up request. */
@@ -171,7 +180,9 @@ export function EditorWorkspace({
     setConflictImport(null);
     if (!conflict) return;
     const request = {
-      requestId: crypto.randomUUID(),
+      requestId: conflict.requestId.startsWith("url-")
+        ? conflict.requestId
+        : crypto.randomUUID(),
       template: conflict.template,
       mode,
       projectId: conflict.projectId,
@@ -231,6 +242,8 @@ export function EditorWorkspace({
               onTemplateImported={handleTemplateImported}
               onImportConflict={handleImportConflict}
               appliedImport={appliedImport}
+              isSidebarOpen={isSidebarOpen}
+              isAiSidebarOpen={isAiSidebarOpen}
               fitInsets={{
                 left: isSidebarOpen ? SIDEBAR_WIDTH_PX : 0,
                 right: isAiSidebarOpen ? SIDEBAR_WIDTH_PX : 0,
@@ -290,8 +303,8 @@ export function EditorWorkspace({
             <DialogHeader>
               <DialogTitle>Canvas already has content</DialogTitle>
               <DialogDescription>
-                Import “{conflictImport.template.name}” without losing what is
-                already on the canvas:
+                Choose whether to replace the existing canvas, add the
+                template to this project, or start a new project:
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="flex-col items-stretch sm:flex-col sm:items-stretch">

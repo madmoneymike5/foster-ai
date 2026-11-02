@@ -85,6 +85,8 @@ interface LiveCanvasProps {
    * zoom-fit treats them as unavailable work area.
    */
   fitInsets: { left: number; right: number };
+  isSidebarOpen: boolean;
+  isAiSidebarOpen: boolean;
 }
 
 type CanvasState = "ready" | "connection-error" | "access-revoked";
@@ -113,6 +115,8 @@ export function LiveCanvas({
   onImportConflict,
   appliedImport,
   fitInsets,
+  isSidebarOpen,
+  isAiSidebarOpen,
 }: LiveCanvasProps) {
   const [state, setState] = useState<CanvasState>("ready");
   const showConnectionError = useCallback(
@@ -145,6 +149,8 @@ export function LiveCanvas({
                   onTemplateImported={onTemplateImported ?? (() => {})}
                   onImportConflict={onImportConflict ?? (() => {})}
                   fitInsets={fitInsets}
+                  isSidebarOpen={isSidebarOpen}
+                  isAiSidebarOpen={isAiSidebarOpen}
                   appliedImport={appliedImport ?? null}
                 />
               )}
@@ -251,6 +257,8 @@ interface LiveFlowCanvasProps {
   onTemplateImported: (requestId: string) => void;
   onImportConflict: (request: CanvasImportRequest) => void;
   fitInsets: { left: number; right: number };
+  isSidebarOpen: boolean;
+  isAiSidebarOpen: boolean;
   /** The last import the canvas acknowledged, for the post-import fit. */
   appliedImport: { requestId: string; nodeIds: string[] } | null;
 }
@@ -283,6 +291,7 @@ function useStarterTemplateImport({
     suspense: true,
   });
   const history = useHistory();
+  const room = useRoom();
   // The requestId of the last request actually applied; keeps a
   // double-invoked effect (React strict mode) from importing twice.
   const consumedRequestId = useRef<string | null>(null);
@@ -338,13 +347,15 @@ function useStarterTemplateImport({
         // `replace` (or an `ask` that found an empty canvas): clear first,
         // in one atomic mutation, so no collaborator ever sees a dangling
         // edge.
-        onDelete({ nodes, edges });
-        onNodesChange(
-          template.nodes.map((node) => ({ type: "add" as const, item: node })),
-        );
-        onEdgesChange(
-          template.edges.map((edge) => ({ type: "add" as const, item: edge })),
-        );
+        room.batch(() => {
+          onDelete({ nodes, edges });
+          onNodesChange(
+            template.nodes.map((node) => ({ type: "add" as const, item: node })),
+          );
+          onEdgesChange(
+            template.edges.map((edge) => ({ type: "add" as const, item: edge })),
+          );
+        });
       }
     } finally {
       history.resume();
@@ -367,6 +378,7 @@ function useStarterTemplateImport({
     onEdgesChange,
     onDelete,
     history,
+    room,
   ]);
 
   return {
@@ -579,6 +591,8 @@ function LiveFlowCanvas({
   onTemplateImported,
   onImportConflict,
   fitInsets,
+  isSidebarOpen,
+  isAiSidebarOpen,
   appliedImport,
 }: LiveFlowCanvasProps) {
   const {
@@ -776,8 +790,8 @@ function LiveFlowCanvas({
       >
         <HydratedFlowFit />
         <ImportedTemplateFit importedNodes={appliedImport} />
-        <CanvasPresence />
-        <CanvasControls />
+        <CanvasPresence isAiSidebarOpen={isAiSidebarOpen} />
+        <CanvasControls isSidebarOpen={isSidebarOpen} />
         <MiniMap />
         <Background
           variant={BackgroundVariant.Dots}

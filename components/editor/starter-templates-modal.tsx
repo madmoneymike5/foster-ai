@@ -237,8 +237,8 @@ export function StarterTemplatesModal({
         <DialogHeader>
           <DialogTitle>Starter templates</DialogTitle>
           <DialogDescription>
-            Import a prebuilt diagram. This replaces the current canvas
-            contents.
+            Import a prebuilt diagram. If the canvas already has content,
+            you can replace it, add to the project, or start a new project.
           </DialogDescription>
         </DialogHeader>
         <div className="grid min-h-0 grid-cols-1 gap-3 overflow-y-auto pr-1 sm:grid-cols-2">

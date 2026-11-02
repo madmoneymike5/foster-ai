@@ -69,6 +69,8 @@ const MINIMUM_STUB = 8;
 const MAXIMUM_STUB = 240;
 /** How far past the content the route is allowed to detour (flow px). */
 const PERIMETER_MARGIN = 64;
+/** Maximum Hanan-grid points searched synchronously during one render. */
+const MAX_ROUTING_GRID_POINTS = 1600;
 
 /**
  * How far along the handle ray the stub sits: the preferred length when
@@ -500,6 +502,13 @@ function simplifyCollinear(path: RoutePoint[]): RoutePoint[] {
   return out;
 }
 
+function estimatedGridPointCount(boxes: ObstacleBox[]): number {
+  // Each obstacle contributes two coordinates per axis; endpoints and the
+  // outer perimeter add four more. This matches buildGrid's worst-case
+  // Cartesian product without allocating the grid.
+  return (boxes.length * 2 + 4) ** 2;
+}
+
 /* -------------------------------- output -------------------------------- */
 
 function toPath(points: RoutePoint[]): string {
@@ -572,6 +581,9 @@ export function routeOrthogonalEdge(request: RouteRequest): RoutedEdge | null {
       },
     }));
     const obstacles = entries.map(({ box }) => box);
+    if (estimatedGridPointCount(obstacles) > MAX_ROUTING_GRID_POINTS) {
+      return null;
+    }
     const sourceObstacle = rawSourceObstacle
       ? entries.find(({ raw }) => raw === rawSourceObstacle)?.box ?? null
       : null;

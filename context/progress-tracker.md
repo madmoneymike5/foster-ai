@@ -4,7 +4,7 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase (ONLY ONE AT A TIME!)
 
-The `context/current-issues.md` batch (7 canvas interaction fixes), follow-up connection visibility/routing fixes, and spec 19 presence work are complete on the `development` branch. Specs 02–19 and all follow-up work remain uncommitted pending Sarah's instruction.
+The `context/current-issues.md` batch (7 canvas interaction fixes), follow-up connection visibility/routing fixes, and spec 19 presence work are complete on the `development` branch. Specs 11 and 12 are committed, and spec 19 presence work is committed as f8540bb; the remaining work has mixed commit status.
 
 ## Current Goal (ONLY ONE AT A TIME!)
 

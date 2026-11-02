@@ -31,7 +31,8 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement ||
-    target.isContentEditable
+    target.isContentEditable ||
+    Boolean(target.closest('[role="dialog"]'))
   );
 }
 
@@ -105,7 +106,7 @@ export function useKeyboardShortcuts({
       }
 
       // Bare zoom keys only: Cmd/Ctrl combinations are browser page-zoom.
-      if (modifier) return;
+      if (modifier || event.altKey) return;
 
       if (event.key === "+" || event.key === "=") {
         void flow.zoomIn({ duration: CANVAS_ZOOM_ANIMATION_MS });

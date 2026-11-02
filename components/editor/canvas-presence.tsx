@@ -46,7 +46,13 @@ function CollaboratorAvatar({ participant }: { participant: ParticipantInfo }) {
   );
 }
 
-function CanvasParticipantGroup({ currentUserId }: { currentUserId: string | null }) {
+function CanvasParticipantGroup({
+  currentUserId,
+  isAiSidebarOpen,
+}: {
+  currentUserId: string | null;
+  isAiSidebarOpen: boolean;
+}) {
   const mappedParticipants = useOthersMapped(
     (other) => ({
       id: other.id,
@@ -72,7 +78,11 @@ function CanvasParticipantGroup({ currentUserId }: { currentUserId: string | nul
   const overflowCount = Math.max(collaborators.length - visibleCollaborators.length, 0);
 
   return (
-    <Panel position="top-right" className="!m-3">
+    <Panel
+      position="top-right"
+      className="!m-3"
+      style={{ transform: isAiSidebarOpen ? "translateX(-320px)" : undefined }}
+    >
       <div
         aria-label="Canvas participants"
         className="flex items-center rounded-xl border border-surface-border bg-surface/90 px-2 py-1 shadow-lg backdrop-blur"
@@ -170,13 +180,16 @@ function CanvasCursors({ currentUserId }: { currentUserId: string | null }) {
  * @param currentUserId - The active Clerk user ID, used to exclude the current
  * user from collaborator avatars and cursor rendering.
  */
-export function CanvasPresence() {
+export function CanvasPresence({ isAiSidebarOpen = false }: { isAiSidebarOpen?: boolean }) {
   const { userId } = useAuth();
   const currentUserId = userId ?? null;
 
   return (
     <>
-      <CanvasParticipantGroup currentUserId={currentUserId} />
+      <CanvasParticipantGroup
+        currentUserId={currentUserId}
+        isAiSidebarOpen={isAiSidebarOpen}
+      />
       <CanvasCursors currentUserId={currentUserId} />
     </>
   );

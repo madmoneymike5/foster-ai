@@ -227,7 +227,7 @@ export function withRemappedIds(
   requestId: string,
   template: CanvasTemplate,
 ): { nodes: CanvasNode[]; edges: CanvasEdge[]; nodeIds: string[] } {
-  const prefix = `tpl-${requestId.slice(0, 8)}-`;
+  const prefix = `tpl-${requestId}-`;
   const idMap = new Map<string, string>();
   for (const node of template.nodes) {
     idMap.set(node.id, `${prefix}${node.id}`);

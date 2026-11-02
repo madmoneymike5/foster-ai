@@ -64,7 +64,15 @@ const TARGET_POINT_PREVIEW_DISTANCE = 64;
  * a connection and any point on another node can end it. `u`/`v` place each
  * point in the node's 0-1 box (y down).
  */
-const CONNECTION_POINTS = [
+interface ConnectionPoint {
+  id: string;
+  position: Position;
+  u: number;
+  v: number;
+  cornerClass: string;
+}
+
+const CONNECTION_POINTS: readonly ConnectionPoint[] = [
   { id: "top", position: Position.Top, u: 0.5, v: 0, cornerClass: "" },
   { id: "right", position: Position.Right, u: 1, v: 0.5, cornerClass: "" },
   { id: "bottom", position: Position.Bottom, u: 0.5, v: 1, cornerClass: "" },
@@ -375,16 +383,39 @@ function outlineSegments(
         { a: [0, 1], b: [0, 0], mode: SIDE.left },
       ];
     case "pill": {
-      // Flat top/bottom plus a two-segment cap at each end.
-      const rx = Math.min((height / 2) / width, 0.5);
-      return [
+      // Keep the straight top and bottom runs, but sample each rounded cap so
+      // hit testing follows the rendered outline instead of cutting across it.
+      const radius = Math.min(width, height) / 2;
+      const rx = radius / width;
+      const ry = radius / height;
+      const segments: OutlineSegment[] = [
         { a: [rx, 0], b: [1 - rx, 0], mode: SIDE.top },
-        { a: [1 - rx, 0], b: [1, 0.5], mode: CORNER.topRight },
-        { a: [1, 0.5], b: [1 - rx, 1], mode: CORNER.bottomRight },
-        { a: [1 - rx, 1], b: [rx, 1], mode: SIDE.bottom },
-        { a: [rx, 1], b: [0, 0.5], mode: CORNER.bottomLeft },
-        { a: [0, 0.5], b: [rx, 0], mode: CORNER.topLeft },
       ];
+      const capSteps = 8;
+      for (let i = 0; i < capSteps; i++) {
+        const t0 = -Math.PI / 2 + (i / capSteps) * Math.PI;
+        const t1 = -Math.PI / 2 + ((i + 1) / capSteps) * Math.PI;
+        segments.push({
+          a: [1 - rx + rx * Math.cos(t0), 0.5 + ry * Math.sin(t0)],
+          b: [1 - rx + rx * Math.cos(t1), 0.5 + ry * Math.sin(t1)],
+          mode: compassMode((t0 + t1) / 2),
+        });
+      }
+      segments.push({
+        a: [1 - rx, 1],
+        b: [rx, 1],
+        mode: SIDE.bottom,
+      });
+      for (let i = 0; i < capSteps; i++) {
+        const t0 = Math.PI / 2 + (i / capSteps) * Math.PI;
+        const t1 = Math.PI / 2 + ((i + 1) / capSteps) * Math.PI;
+        segments.push({
+          a: [rx + rx * Math.cos(t0), 0.5 + ry * Math.sin(t0)],
+          b: [rx + rx * Math.cos(t1), 0.5 + ry * Math.sin(t1)],
+          mode: compassMode((t0 + t1) / 2),
+        });
+      }
+      return segments;
     }
     case "circle": {
       const segments: OutlineSegment[] = [];
@@ -426,6 +457,47 @@ function outlineSegments(
         { a: [0.01, 0.93], b: [0.01, 0.07], mode: SIDE.left },
       ];
   }
+}
+
+/** Project a corner handle onto the rendered outline along the center ray. */
+function connectionPointPosition(
+  shape: CanvasNodeShape,
+  width: number,
+  height: number,
+  point: (typeof CONNECTION_POINTS)[number],
+): { u: number; v: number } {
+  if (!point.id.startsWith("corner-")) return { u: point.u, v: point.v };
+  const direction: Record<string, [number, number]> = {
+    "corner-top-left": [-1, -1],
+    "corner-top-right": [1, -1],
+    "corner-bottom-left": [-1, 1],
+    "corner-bottom-right": [1, 1],
+  };
+  const ray = direction[point.id];
+  if (!ray) return { u: point.u, v: point.v };
+  const cross = (a: [number, number], b: [number, number]) =>
+    a[0] * b[1] - a[1] * b[0];
+  let nearest: { t: number; u: number; v: number } | null = null;
+  for (const segment of outlineSegments(shape, width, height)) {
+    const edge: [number, number] = [
+      segment.b[0] - segment.a[0],
+      segment.b[1] - segment.a[1],
+    ];
+    const denominator = cross(ray, edge);
+    if (Math.abs(denominator) < Number.EPSILON) continue;
+    const fromCenter: [number, number] = [segment.a[0] - 0.5, segment.a[1] - 0.5];
+    const t = cross(fromCenter, edge) / denominator;
+    const along = cross(fromCenter, ray) / denominator;
+    if (t < 0 || along < 0 || along > 1) continue;
+    if (!nearest || t < nearest.t) {
+      nearest = {
+        t,
+        u: 0.5 + ray[0] * t,
+        v: 0.5 + ray[1] * t,
+      };
+    }
+  }
+  return nearest ? { u: nearest.u, v: nearest.v } : { u: point.u, v: point.v };
 }
 
 /**
@@ -492,8 +564,9 @@ function hitResizeSegment(
   ly: number,
 ): ResizeMode | null {
   for (const point of CONNECTION_POINTS) {
+    const projected = connectionPointPosition(shape, width, height, point);
     if (
-      Math.hypot(lx - point.u * width, ly - point.v * height) <=
+      Math.hypot(lx - projected.u * width, ly - projected.v * height) <=
       CONNECTION_POINT_PX
     ) {
       return null;
@@ -586,19 +659,19 @@ function applyResize(
         break;
       case "left":
         w = clamp(w - dx, MIN_NODE_WIDTH);
-        x += box.w - w;
         if (keepAspect) {
           lockHeight(w);
           y += (box.h - h) / 2;
         }
+        x += box.w - w;
         break;
       case "top":
         h = clamp(h - dy, MIN_NODE_HEIGHT);
-        y += box.h - h;
         if (keepAspect) {
           lockWidth(h);
           x += (box.w - w) / 2;
         }
+        y += box.h - h;
         break;
       case "bottom":
         h = clamp(h + dy, MIN_NODE_HEIGHT);
@@ -875,11 +948,11 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
       id,
       resizing: true,
       setAttributes:
-        drag.mode.kind === "side"
-          ? drag.mode.side === "top" || drag.mode.side === "bottom"
-            ? "height"
-            : "width"
-          : true,
+        next.w !== drag.box.w && next.h !== drag.box.h
+          ? true
+          : next.w !== drag.box.w
+            ? "width"
+            : "height",
       dimensions: { width: next.w, height: next.h },
     });
     services.onNodesChange(changes);
@@ -903,19 +976,10 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
   const resizeMouseDownRef = useRef<(event: WindowEventMap["mousedown"]) => void>(
     () => {},
   );
-  useLayoutEffect(() => {
-    resizeMouseDownRef.current = (event: WindowEventMap["mousedown"]) => {
-    if (event.button !== 0 || isEditing) return;
-    const target = event.target as Element;
-    if (
-      target.closest(".react-flow__handle") ||
-      target.closest(".react-flow__node-toolbar") ||
-      target.closest("textarea")
-    ) {
-      return;
-    }
-    const local = localPoint(event.clientX, event.clientY);
-    if (!local) return;
+  const beginResize = (clientX: number, clientY: number, pointerId: number) => {
+    if (resizeDragRef.current || isEditing) return false;
+    const local = localPoint(clientX, clientY);
+    if (!local) return false;
     const mode = hitResizeSegment(
       data.shape,
       local.box.w,
@@ -923,9 +987,8 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
       local.lx,
       local.ly,
     );
-    if (!mode) return;
+    if (!mode) return false;
 
-    event.stopPropagation();
     resizeDragRef.current = {
       mode,
       pointerX: local.flow.x,
@@ -933,16 +996,33 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
       startBox: local.box,
       box: local.box,
     };
-    // Capture keeps the drag receiving moves even when the pointer races
-    // off the node. The mousedown map type omits pointerId (a plain
-    // MouseEvent carries none at runtime either), and the mouse's pointer
-    // id is always this value.
-    try {
-      nodeElementRef.current?.setPointerCapture(MOUSE_POINTER_ID);
-    } catch {
-      // Capture is a convenience: without it the resize still commits on
-      // every pointermove that reaches the node.
+    const nodeElement = nodeElementRef.current;
+    if (!nodeElement) {
+      resizeDragRef.current = null;
+      return false;
     }
+    try {
+      nodeElement.setPointerCapture(pointerId);
+    } catch {
+      // A failed capture must not leave a resize armed for unrelated moves.
+      resizeDragRef.current = null;
+      return false;
+    }
+    return true;
+  };
+  useLayoutEffect(() => {
+    resizeMouseDownRef.current = (event: WindowEventMap["mousedown"]) => {
+      if (event.button !== 0 || isEditing) return;
+      const target = event.target as Element;
+      if (
+        target.closest(".react-flow__handle") ||
+        target.closest(".react-flow__node-toolbar") ||
+        target.closest("textarea")
+      ) {
+        return;
+      }
+      if (!beginResize(event.clientX, event.clientY, MOUSE_POINTER_ID)) return;
+      event.stopPropagation();
     };
   });
   useEffect(() => {
@@ -954,9 +1034,29 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
     return () => el.removeEventListener("mousedown", listener, true);
   }, []);
 
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== "touch") return;
+    const target = event.target as Element;
+    if (
+      target.closest(".react-flow__handle") ||
+      target.closest(".react-flow__node-toolbar") ||
+      target.closest("textarea")
+    ) {
+      return;
+    }
+    if (beginResize(event.clientX, event.clientY, event.pointerId)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
+
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const drag = resizeDragRef.current;
     if (!drag) return;
+    if (event.buttons === 0) {
+      endResize(event);
+      return;
+    }
     const flow = services.screenToFlowPosition({
       x: event.clientX,
       y: event.clientY,
@@ -982,6 +1082,10 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
     ]);
   };
 
+  const handleBox = readBox();
+  const handleWidth = handleBox?.w ?? SHAPE_SIZES[data.shape].width;
+  const handleHeight = handleBox?.h ?? SHAPE_SIZES[data.shape].height;
+
   return (
     <div
       className="group relative h-full w-full text-sm"
@@ -992,10 +1096,11 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
         setHoverCursor(null);
       }}
       onMouseMove={handleMouseMove}
+      onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={endResize}
       onPointerCancel={endResize}
-      style={{ cursor: hoverCursor ?? undefined }}
+      style={{ cursor: hoverCursor ?? undefined, touchAction: "none" }}
     >
       <ShapeSurface
         background={displayColor.background}
@@ -1009,8 +1114,16 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
           before the cursor has to land fully on the shape. Rendered after
           everything else so they sit above the outline-resize zones where
           they overlap. */}
-      {CONNECTION_POINTS.map(({ id: pointId, position, cornerClass }) => (
-        <Handle
+      {CONNECTION_POINTS.map((connectionPoint) => {
+        const { id: pointId, position, cornerClass } = connectionPoint;
+        const { u: pointU, v: pointV } = connectionPointPosition(
+          data.shape,
+          handleWidth,
+          handleHeight,
+          connectionPoint,
+        );
+        return (
+          <Handle
           className={`nodrag flex h-6 w-6 items-center justify-center rounded-full ${cornerClass}`}
           id={pointId}
           key={pointId}
@@ -1024,6 +1137,9 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
             border: "none",
             pointerEvents: "all",
             zIndex: 20,
+            left: `${pointU * 100}%`,
+            top: `${pointV * 100}%`,
+            transform: "translate(-50%, -50%)",
           }}
           type="source"
         >
@@ -1041,8 +1157,9 @@ export function CanvasNodeView({ id, data, selected }: NodeProps<CanvasNode>) {
                   : 0,
             }}
           />
-        </Handle>
-      ))}
+          </Handle>
+        );
+      })}
       {/* NodeToolbar renders only when this node is the sole selected node and
           keeps the swatches at a constant screen size above the node.
           nodrag/nopan/nowheel plus stopped pointer, mouse, click, wheel, and

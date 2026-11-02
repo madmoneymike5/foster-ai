@@ -72,7 +72,7 @@ function ControlButton({ label, onClick, disabled, icon }: ControlButtonProps) {
  * and wires the matching keyboard shortcuts through `useKeyboardShortcuts`;
  * `nodrag nopan nowheel` keep control-bar interaction from moving the canvas.
  */
-export function CanvasControls() {
+export function CanvasControls({ isSidebarOpen = false }: { isSidebarOpen?: boolean }) {
   const reactFlowInstance = useReactFlow<CanvasNode, CanvasEdge>();
   const { fitVisibleArea } = useCanvasServices();
   const undo = useUndo();
@@ -105,6 +105,7 @@ export function CanvasControls() {
     <Panel
       className="nodrag nopan nowheel m-5 flex items-center gap-1 rounded-full border border-surface-border bg-surface px-2 py-1.5 shadow-lg"
       position="bottom-left"
+      style={{ transform: isSidebarOpen ? "translateX(320px)" : undefined }}
     >
       <ControlButton
         icon={<Minus className="h-5 w-5" />}
