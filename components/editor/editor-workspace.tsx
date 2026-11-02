@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { AiSidebar } from "@/components/editor/ai-sidebar";
 import { EditorNavbar } from "@/components/editor/editor-navbar";
@@ -9,14 +10,43 @@ import { EditorHome } from "@/components/editor/editor-home";
 import { ProjectDialogs } from "@/components/editor/project-dialogs";
 import { ProjectSidebar } from "@/components/editor/project-sidebar";
 import { ShareDialog } from "@/components/editor/share-dialog";
+import { StarterTemplatesModal } from "@/components/editor/starter-templates-modal";
+import {
+  getTemplateById,
+  withRemappedIds,
+  type CanvasImportRequest,
+} from "@/components/editor/starter-templates";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useProjectActions } from "@/hooks/use-project-actions";
 import type { ProjectListItem } from "@/lib/projects";
+
+/**
+ * The floating sidebars are 20rem (w-80) wide; when open, that much of the
+ * canvas edge is covered, and the zoom-fit treats it as unavailable work
+ * area (fitting into the visible strip between the open panels instead).
+ */
+const SIDEBAR_WIDTH_PX = 320;
 
 interface EditorWorkspaceProps {
   ownedProjects: ProjectListItem[];
   sharedProjects: ProjectListItem[];
   /** The open project on /editor/[roomId]; absent on the /editor home. */
   activeProject?: ProjectListItem;
+  /**
+   * A starter template carried in the URL after a "new project + import"
+   * creation; imported into the (empty) room on mount, then stripped from
+   * the URL.
+   */
+  starterTemplateId?: string;
 }
 
 /**
@@ -30,14 +60,22 @@ interface EditorWorkspaceProps {
  *
  * With an active project the shell is the full-viewport workspace: the
  * navbar carries the project name plus share and AI-sidebar actions, the
- * sidebar highlights the current room, the center holds the (empty) canvas
- * placeholder, and the AI sidebar floats on the right.
+ * sidebar highlights the current room, the center holds the canvas, and the
+ * AI sidebar floats on the right.
+ *
+ * Starter template imports: a modal selection becomes a one-shot request
+ * (`mode: "ask"`) that the canvas applies directly on an empty canvas and
+ * hands back as a conflict on a non-empty one; the conflict dialog offers
+ * replace, add to project, or new project (which creates the project and
+ * carries the template into it via the URL).
  */
 export function EditorWorkspace({
   ownedProjects,
   sharedProjects,
   activeProject,
+  starterTemplateId,
 }: EditorWorkspaceProps) {
+  const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   // The AI sidebar only exists in a workspace; it opens by default there so
   // the placeholder is visible on first load.
@@ -46,9 +84,129 @@ export function EditorWorkspace({
   // derived from the server-decided isShared flag (a shared row means the
   // caller is a collaborator, not the owner).
   const [isShareOpen, setIsShareOpen] = useState(false);
+  // Starter template import: the modal is workspace-only, and the selected
+  // template travels to the canvas as a one-shot request (a fresh requestId
+  // per selection) that LiveCanvas applies to the active room once.
+  const [isStarterTemplatesOpen, setIsStarterTemplatesOpen] = useState(false);
+  const [pendingImport, setPendingImport] = useState<
+    (CanvasImportRequest & { projectId: string }) | null
+  >(null);
+  // A pending import the canvas reported a conflict for (non-empty canvas
+  // under an `ask` request); the dialog below chooses how to proceed.
+  const [conflictImport, setConflictImport] = useState<
+    (CanvasImportRequest & { projectId: string }) | null
+  >(null);
+  // The last acknowledged import (request id + imported node ids), which the
+  // canvas uses for its post-import fit.
+  const [appliedImport, setAppliedImport] = useState<{
+    requestId: string;
+    nodeIds: string[];
+  } | null>(null);
+  // The canvas acknowledges through a stable callback, so the pending import
+  // it is reacting to is read from a ref rather than a closure. Every write
+  // site updates the ref *synchronously* (not only in the effect below):
+  // child effects run before this component's, so the canvas's import effect
+  // fires before this render's ref-mirror effect could have run.
+  const pendingImportRef = useRef(pendingImport);
+  useEffect(() => {
+    pendingImportRef.current = pendingImport;
+  }, [pendingImport]);
+
+  // A pending import belongs to the room it was selected in; deriving the
+  // canvas prop this way keeps a stale request from ever reaching a
+  // different room. URL imports use the same `ask` flow as modal imports so a
+  // populated canvas cannot be replaced without confirmation.
+  const urlImport = useMemo<
+    (CanvasImportRequest & { projectId: string }) | null
+  >(() => {
+    if (!starterTemplateId || !activeProject) return null;
+    const template = getTemplateById(starterTemplateId);
+    if (!template) return null;
+    return {
+      requestId: `url-${starterTemplateId}-${activeProject.id}`,
+      template,
+      mode: "ask",
+      projectId: activeProject.id,
+    };
+  }, [starterTemplateId, activeProject]);
+  const importRequest =
+    pendingImport?.projectId === activeProject?.id
+      ? pendingImport
+      : urlImport?.projectId === activeProject?.id
+        ? urlImport
+        : null;
+
+  const handleTemplateImported = useCallback((requestId: string) => {
+    const pending = pendingImportRef.current;
+    const current =
+      pending?.requestId === requestId
+        ? pending
+        : urlImport?.requestId === requestId
+          ? urlImport
+          : null;
+    if (!current) return;
+    const nodeIds =
+      current.mode === "add"
+        ? withRemappedIds(current.requestId, current.template).nodeIds
+        : current.template.nodes.map((node) => node.id);
+    setAppliedImport({ requestId, nodeIds });
+    if (pending?.requestId === requestId) {
+      pendingImportRef.current = null;
+      setPendingImport(null);
+    }
+    if (urlImport?.requestId === requestId && activeProject) {
+      router.replace(`/editor/${activeProject.id}`);
+    }
+  }, [activeProject, router, urlImport]);
+  const handleImportConflict = useCallback(
+    (request: CanvasImportRequest) => {
+      const pending = pendingImportRef.current;
+      const current =
+        pending?.requestId === request.requestId
+          ? pending
+          : urlImport?.requestId === request.requestId
+            ? urlImport
+            : null;
+      if (!current) return;
+      setConflictImport(current);
+    },
+    [urlImport],
+  );
   const actions = useProjectActions();
 
+  /** Answer the import conflict with an explicit-mode follow-up request. */
+  const proceedWithImport = (mode: "replace" | "add") => {
+    const conflict = conflictImport;
+    setConflictImport(null);
+    if (!conflict) return;
+    const request = {
+      requestId: conflict.requestId.startsWith("url-")
+        ? conflict.requestId
+        : crypto.randomUUID(),
+      template: conflict.template,
+      mode,
+      projectId: conflict.projectId,
+    };
+    pendingImportRef.current = request;
+    setPendingImport(request);
+  };
+  /**
+   * "New project" in the conflict dialog: create a fresh project first, then
+   * carry the template into it via the URL; the new workspace imports it on
+   * mount. The current room is left untouched.
+   */
+  const proceedWithNewProject = () => {
+    const conflict = conflictImport;
+    setConflictImport(null);
+    pendingImportRef.current = null;
+    setPendingImport(null);
+    if (conflict) actions.openCreateForTemplate(conflict.template.id);
+  };
+
   return (
+    // One provider groups the shell's tooltips: neighbouring triggers
+    // switch instantly and share the open delay.
+    <TooltipProvider>
     <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
       <EditorNavbar
         isSidebarOpen={isSidebarOpen}
@@ -59,6 +217,9 @@ export function EditorWorkspace({
           activeProject ? () => setIsAiSidebarOpen((open) => !open) : undefined
         }
         onShareProject={activeProject ? () => setIsShareOpen(true) : undefined}
+        onOpenStarterTemplates={
+          activeProject ? () => setIsStarterTemplatesOpen(true) : undefined
+        }
       />
       <div className="relative flex min-h-0 flex-1">
         <ProjectSidebar
@@ -74,7 +235,20 @@ export function EditorWorkspace({
         />
         <main className="relative flex min-w-0 flex-1 overflow-hidden bg-base">
           {activeProject ? (
-            <LiveCanvas key={activeProject.id} roomId={activeProject.id} />
+            <LiveCanvas
+              key={activeProject.id}
+              roomId={activeProject.id}
+              importRequest={importRequest}
+              onTemplateImported={handleTemplateImported}
+              onImportConflict={handleImportConflict}
+              appliedImport={appliedImport}
+              isSidebarOpen={isSidebarOpen}
+              isAiSidebarOpen={isAiSidebarOpen}
+              fitInsets={{
+                left: isSidebarOpen ? SIDEBAR_WIDTH_PX : 0,
+                right: isAiSidebarOpen ? SIDEBAR_WIDTH_PX : 0,
+              }}
+            />
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center">
               <EditorHome onNewProject={actions.openCreate} />
@@ -97,7 +271,69 @@ export function EditorWorkspace({
           onOpenChange={setIsShareOpen}
         />
       )}
+      {activeProject && (
+        <StarterTemplatesModal
+          open={isStarterTemplatesOpen}
+          onOpenChange={setIsStarterTemplatesOpen}
+          onImport={(template) => {
+            const request = {
+              requestId: crypto.randomUUID(),
+              template,
+              mode: "ask" as const,
+              projectId: activeProject.id,
+            };
+            pendingImportRef.current = request;
+            setPendingImport(request);
+          }}
+        />
+      )}
+      {conflictImport && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              // Dismissing the dialog abandons the import.
+              setConflictImport(null);
+              pendingImportRef.current = null;
+              setPendingImport(null);
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Canvas already has content</DialogTitle>
+              <DialogDescription>
+                Choose whether to replace the existing canvas, add the
+                template to this project, or start a new project:
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex-col items-stretch sm:flex-col sm:items-stretch">
+              <Button
+                onClick={() => proceedWithImport("replace")}
+                type="button"
+              >
+                Replace canvas
+              </Button>
+              <Button
+                className="w-full"
+                onClick={() => proceedWithImport("add")}
+                variant="outline"
+              >
+                Add to project
+              </Button>
+              <Button
+                className="w-full"
+                onClick={proceedWithNewProject}
+                variant="ghost"
+              >
+                New project
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
       <ProjectDialogs actions={actions} />
     </div>
+    </TooltipProvider>
   );
 }

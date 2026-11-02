@@ -35,15 +35,17 @@ export type CanvasNodeColorPair = (typeof NODE_COLORS)[number];
 export type CanvasNodeShape = (typeof NODE_SHAPES)[number];
 
 /**
- * Return a supported palette pair for a stored node color.
+ * Convert a stored color pair into one of the palette entries currently shown
+ * by the toolbar. Older rooms can still contain a color that was removed from
+ * NODE_COLORS; using the default keeps those nodes usable instead of leaving
+ * every swatch inactive.
  *
- * Rooms can outlive the palette: a node may still contain a pair that was
- * removed from NODE_COLORS in a later release. Normalizing at read time keeps
- * the color toolbar from showing no active swatch. The old storage value is
- * left untouched until the user deliberately picks a new swatch.
+ * This is intentionally a pure read-time fallback. The old value is not
+ * rewritten until the user chooses a new color, so opening a room cannot
+ * create an unexpected collaborative storage write.
  *
- * @param color - The pair read from node storage, including legacy values.
- * @returns A current palette pair for rendering and active-state comparison.
+ * @param color - The pair read from a node, including legacy values.
+ * @returns A supported palette pair for rendering and swatch comparison.
  */
 export function normalizeNodeColor(
   color: CanvasNodeColor | null | undefined,

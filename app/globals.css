@@ -144,3 +144,35 @@
     min-height: 100vh;
   }
 }
+
+/*
+ * Canvas connection point handles: React Flow's built-in handle CSS only
+ * positions the four side-midpoint handles, so the four corner connection
+ * points on each canvas node override that placement to sit on the corners
+ * of the node's bounding box (the handles keep React Flow's own base class).
+ */
+.react-flow__handle.canvas-handle-corner-tl {
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+}
+
+.react-flow__handle.canvas-handle-corner-tr {
+  top: 0;
+  left: 100%;
+  transform: translate(-50%, -50%);
+}
+
+.react-flow__handle.canvas-handle-corner-bl {
+  top: auto;
+  bottom: 0;
+  left: 0;
+  transform: translate(-50%, 50%);
+}
+
+.react-flow__handle.canvas-handle-corner-br {
+  top: auto;
+  bottom: 0;
+  left: 100%;
+  transform: translate(-50%, 50%);
+}

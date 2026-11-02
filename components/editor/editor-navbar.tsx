@@ -2,6 +2,7 @@
 
 import { UserButton } from "@clerk/nextjs";
 import {
+  LayoutTemplate,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -10,6 +11,11 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface EditorNavbarProps {
   isSidebarOpen: boolean;
@@ -21,6 +27,8 @@ interface EditorNavbarProps {
   onToggleAiSidebar?: () => void;
   /** Present only for an active workspace; opens the share dialog. */
   onShareProject?: () => void;
+  /** Present only for an active workspace; opens the starter templates dialog. */
+  onOpenStarterTemplates?: () => void;
 }
 
 /**
@@ -43,25 +51,37 @@ export function EditorNavbar({
   isAiSidebarOpen,
   onToggleAiSidebar,
   onShareProject,
+  onOpenStarterTemplates,
 }: EditorNavbarProps) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-surface-border bg-surface px-3">
       <div className="flex items-center">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={
-            isSidebarOpen ? "Close projects sidebar" : "Open projects sidebar"
-          }
-          aria-expanded={isSidebarOpen}
-          onClick={onToggleSidebar}
-        >
-          {isSidebarOpen ? (
-            <PanelLeftClose className="h-5 w-5" />
-          ) : (
-            <PanelLeftOpen className="h-5 w-5" />
-          )}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={
+                  isSidebarOpen
+                    ? "Close projects sidebar"
+                    : "Open projects sidebar"
+                }
+                aria-expanded={isSidebarOpen}
+              />
+            }
+            onClick={onToggleSidebar}
+          >
+            {isSidebarOpen ? (
+              <PanelLeftClose className="h-5 w-5" />
+            ) : (
+              <PanelLeftOpen className="h-5 w-5" />
+            )}
+          </TooltipTrigger>
+          <TooltipContent>
+            {isSidebarOpen ? "Close projects sidebar" : "Open projects sidebar"}
+          </TooltipContent>
+        </Tooltip>
       </div>
       <div className="flex min-w-0 flex-1 items-center justify-center">
         {projectName && (
@@ -71,30 +91,65 @@ export function EditorNavbar({
         )}
       </div>
       <div className="flex items-center gap-1">
+        {onOpenStarterTemplates && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Import starter template"
+                />
+              }
+              onClick={onOpenStarterTemplates}
+            >
+              <LayoutTemplate className="h-5 w-5" />
+            </TooltipTrigger>
+            <TooltipContent>Import starter template</TooltipContent>
+          </Tooltip>
+        )}
         {projectName && onShareProject && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Share project"
-            onClick={onShareProject}
-          >
-            <Share2 className="h-5 w-5" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Share project"
+                />
+              }
+              onClick={onShareProject}
+            >
+              <Share2 className="h-5 w-5" />
+            </TooltipTrigger>
+            <TooltipContent>Share project</TooltipContent>
+          </Tooltip>
         )}
         {onToggleAiSidebar && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={isAiSidebarOpen ? "Close AI sidebar" : "Open AI sidebar"}
-            aria-expanded={isAiSidebarOpen ?? false}
-            onClick={onToggleAiSidebar}
-          >
-            {isAiSidebarOpen ? (
-              <PanelRightClose className="h-5 w-5" />
-            ) : (
-              <PanelRightOpen className="h-5 w-5" />
-            )}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={
+                    isAiSidebarOpen ? "Close AI sidebar" : "Open AI sidebar"
+                  }
+                  aria-expanded={isAiSidebarOpen ?? false}
+                />
+              }
+              onClick={onToggleAiSidebar}
+            >
+              {isAiSidebarOpen ? (
+                <PanelRightClose className="h-5 w-5" />
+              ) : (
+                <PanelRightOpen className="h-5 w-5" />
+              )}
+            </TooltipTrigger>
+            <TooltipContent>
+              {isAiSidebarOpen ? "Close AI sidebar" : "Open AI sidebar"}
+            </TooltipContent>
+          </Tooltip>
         )}
         <UserButton />
       </div>
